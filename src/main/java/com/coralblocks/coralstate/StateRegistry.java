@@ -1,5 +1,6 @@
 package com.coralblocks.coralstate;
 
+import com.coralblocks.coralds.map.IntMap;
 import com.coralblocks.coralds.map.Map;
 import com.coralblocks.coralpool.ObjectPool;
 import com.coralblocks.coralproto.Proto;
@@ -7,7 +8,7 @@ import com.coralblocks.coralproto.Proto;
 public final class StateRegistry {
 
 	private final Map<Class<?>, StateCodec<?,?>> byJavaType = new Map<>();
-	private final Map<Integer, StateCodec<?,?>> byProtoType = new Map<>();
+	private final IntMap<StateCodec<?,?>> byProtoType = new IntMap<>();
 	private final Map<Class<?>, ObjectPool<?>> poolsByJavaType = new Map<>();
 
 	public <T, P extends Proto> StateRegistry register(StateCodec<T, P> stateCodec, ObjectPool<T> pool) {

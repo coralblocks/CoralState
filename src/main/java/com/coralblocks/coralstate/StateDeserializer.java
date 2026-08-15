@@ -2,7 +2,6 @@ package com.coralblocks.coralstate;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.Iterator;
 
 import com.coralblocks.coralds.list.ArrayList;
 import com.coralblocks.coralds.map.CharSequenceMap;
@@ -19,8 +18,8 @@ final class StateDeserializer {
 
 	private static final int PROTO_HEADER_LENGTH = 4;
 
-	private final StringBuilder keyBuilder = new StringBuilder();
-	private final StringBuilder identifierBuilder = new StringBuilder();
+	private final StringBuilder keyBuilder = new StringBuilder(CharSequenceMap.DEFAULT_MAX_KEY_LENGTH);
+	private final StringBuilder identifierBuilder = new StringBuilder(StateSerializer.CORAL_PROTO_WIRE_NAME.length());
 
 	/**
 	 * Reads a serialized State into an empty destination State.
@@ -51,15 +50,14 @@ final class StateDeserializer {
 			}
 
 			int entryCount = readNonNegativeInt(buffer, "State entry count");
-			State decodedState = new State(state.getRegistry());
 			for (int i = 0; i < entryCount; i++) {
-				readChars(buffer, keyBuilder, "State key");
-				decodedState.put(keyBuilder, readValue(state.getRegistry(), buffer));
+				readChars(buffer, keyBuilder, "State key length");
+				state.put(keyBuilder, readValue(state.getRegistry(), buffer));
 			}
 
-			copyValues(decodedState, state);
 			return buffer.position() - startPosition;
 		} catch (RuntimeException e) {
+			state.internalValues().clear();
 			buffer.position(startPosition);
 			throw e;
 		} finally {
@@ -80,7 +78,7 @@ final class StateDeserializer {
 		buffer.limit(nodeEnd);
 
 		try {
-			readChars(buffer, identifierBuilder, "node identifier");
+			readChars(buffer, identifierBuilder, "node identifier length");
 
 			Object value;
 			if (CharSequence.compare(identifierBuilder, StateSerializer.CORAL_PROTO_WIRE_NAME) == 0) {
@@ -146,15 +144,6 @@ final class StateDeserializer {
 		}
 	}
 
-	private static void copyValues(State source, State destination) {
-		CharSequenceMap<Object> values = source.internalValues();
-		Iterator<Object> iter = values.iterator();
-		while(iter.hasNext()) {
-			Object value = iter.next();
-			destination.put(values.getCurrIteratorKey(), value);
-		}
-	}
-
 	private static void readMagic(ByteBuffer buffer) {
 		if (buffer.remaining() < StateSerializer.MAGIC.length()) {
 			throw new IllegalArgumentException("Snapshot is missing the State magic value");
@@ -167,10 +156,10 @@ final class StateDeserializer {
 		}
 	}
 
-	private static void readChars(ByteBuffer buffer, StringBuilder destination, String description) {
-		int length = readNonNegativeInt(buffer, description + " length");
+	private static void readChars(ByteBuffer buffer, StringBuilder destination, String lengthDescription) {
+		int length = readNonNegativeInt(buffer, lengthDescription);
 		if (length > buffer.remaining()) {
-			throw new IllegalArgumentException("Invalid " + description + " length: " + length);
+			throw new IllegalArgumentException("Invalid " + lengthDescription + ": " + length);
 		}
 
 		destination.setLength(0);
