@@ -21,7 +21,7 @@
 
     <dependency>
       <groupId>com.github.coralblocks</groupId>
-      <artifactId>coralproto</artifactId>
+      <artifactId>CoralProto</artifactId>
       <version>1.5.2</version>
     </dependency>
 
