@@ -70,6 +70,24 @@ public class StateSerializerTest {
 	}
 
 	@Test
+	public void calculatesExactSerializedLength() {
+		ArrayList<Person> people = new ArrayList<>(2, 2.0f);
+		people.add(new Person("Alice", 42));
+		people.add(new Person("Bob", 37));
+
+		State state = new State(registry);
+		state.put("person", new Person("Carol", 31));
+		state.put("people", people);
+
+		int serializedLength = state.getSerializedLength();
+		ByteBuffer buffer = ByteBuffer.allocate(serializedLength + 7);
+		buffer.position(7);
+
+		assertEquals(serializedLength, state.writeTo(buffer));
+		assertEquals(0, buffer.remaining());
+	}
+
+	@Test
 	public void writesOneByteCharSequenceKeys() {
 		State state = new State(registry);
 		state.put("ação", new Person("Coral", 1));

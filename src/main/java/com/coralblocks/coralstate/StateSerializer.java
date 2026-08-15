@@ -36,6 +36,31 @@ final class StateSerializer {
 	private final IdentitySet<Object> activeContainers = new IdentitySet<>();
 
 	/**
+	 * Calculates the exact number of bytes required to write the complete State.
+	 *
+	 * @param state the State to measure
+	 * @return the serialized length
+	 */
+	int getSerializedLength(State state) {
+		if (state == null) throw new IllegalArgumentException("State cannot be null");
+
+		activeContainers.clear();
+		try {
+			int length = MAGIC.length() + Short.BYTES + Integer.BYTES;
+			CharSequenceMap<Object> values = state.internalValues();
+			Iterator<Object> iter = values.iterator();
+			while(iter.hasNext()) {
+				Object value = iter.next();
+				length = addLength(length, charsLength(values.getCurrIteratorKey()));
+				length = addLength(length, getValueLength(value, state.getRegistry()));
+			}
+			return length;
+		} finally {
+			activeContainers.clear();
+		}
+	}
+
+	/**
 	 * Writes the complete state at the buffer's current position.
 	 *
 	 * <p>The wire format is always big-endian. The buffer's original byte order is restored
@@ -87,6 +112,53 @@ final class StateSerializer {
 		}
 
 		writeCodecObject(value, registry, buffer);
+	}
+
+	private int getValueLength(Object value, StateRegistry registry) {
+		if (value == null) throw new IllegalArgumentException("State values cannot be null");
+
+		if (value.getClass() == ArrayList.class) {
+			return getArrayListLength((ArrayList<?>) value, registry);
+		}
+
+		return getCodecObjectLength(value, registry);
+	}
+
+	private int getArrayListLength(ArrayList<?> list, StateRegistry registry) {
+		if (!activeContainers.add(list)) {
+			throw new IllegalArgumentException("Cyclic ArrayList detected while measuring State");
+		}
+
+		try {
+			int length = Integer.BYTES;
+			length = addLength(length, charsLength(ARRAY_LIST_WIRE_NAME));
+			length = addLength(length, Integer.BYTES + Float.BYTES + Integer.BYTES);
+			for (int i = 0; i < list.size(); i++) {
+				length = addLength(length, getValueLength(list.get(i), registry));
+			}
+			return length;
+		} finally {
+			activeContainers.remove(list);
+		}
+	}
+
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	private int getCodecObjectLength(Object value, StateRegistry registry) {
+		StateCodec codec = registry.findByJavaType(value.getClass());
+		if (codec == null) {
+			throw new IllegalArgumentException("Unsupported State value type: " + value.getClass().getName());
+		}
+
+		Proto proto = codec.getProto();
+		codec.encode(value, proto);
+		int protoLength = proto.getLength();
+		if (protoLength < 0) {
+			throw new IllegalStateException("Invalid Proto length for " + value.getClass().getName() + ": " + protoLength);
+		}
+
+		int length = Integer.BYTES;
+		length = addLength(length, charsLength(CORAL_PROTO_WIRE_NAME));
+		return addLength(length, protoLength);
 	}
 
 	private void writeArrayList(ArrayList<?> list, StateRegistry registry, ByteBuffer buffer) {
@@ -149,5 +221,16 @@ final class StateSerializer {
 		for (int i = 0; i < value.length(); i++) {
 			buffer.put((byte) value.charAt(i));
 		}
+	}
+
+	private static int charsLength(CharSequence value) {
+		return addLength(Integer.BYTES, value.length());
+	}
+
+	private static int addLength(int left, int right) {
+		if (right < 0 || left > Integer.MAX_VALUE - right) {
+			throw new IllegalArgumentException("Serialized State exceeds the maximum ByteBuffer size");
+		}
+		return left + right;
 	}
 }

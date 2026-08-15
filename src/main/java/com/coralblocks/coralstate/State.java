@@ -46,6 +46,16 @@ public class State {
 	}
 
 	/**
+	 * Returns the exact number of bytes required to serialize this State.
+	 *
+	 * @return the serialized length of this State
+	 * @throws IllegalArgumentException if this State contains an unsupported value or cyclic container
+	 */
+	public int getSerializedLength() {
+		return serializer.getSerializedLength(this);
+	}
+
+	/**
 	 * Writes this State at the buffer's current position.
 	 *
 	 * @param buffer the destination buffer
