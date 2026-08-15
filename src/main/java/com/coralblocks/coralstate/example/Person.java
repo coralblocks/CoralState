@@ -39,7 +39,7 @@ public final class Person {
 		if (!(o instanceof Person)) return false;
 
 		Person other = (Person) o;
-		return age == other.age && charsEqual(name, other.name);
+		return age == other.age && CharSequence.compare(name, other.name) == 0;
 	}
 
 	@Override
@@ -56,11 +56,4 @@ public final class Person {
 		return "Person{name=" + name + ", age=" + age + "}";
 	}
 
-	private static boolean charsEqual(CharSequence left, CharSequence right) {
-		if (left.length() != right.length()) return false;
-		for (int i = 0; i < left.length(); i++) {
-			if (left.charAt(i) != right.charAt(i)) return false;
-		}
-		return true;
-	}
 }

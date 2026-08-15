@@ -96,9 +96,9 @@ public final class StateDeserializer {
 			readChars(buffer, identifierBuilder, "node identifier");
 
 			Object value;
-			if (charsEqual(identifierBuilder, StateSerializer.CORAL_PROTO_WIRE_NAME)) {
+			if (CharSequence.compare(identifierBuilder, StateSerializer.CORAL_PROTO_WIRE_NAME) == 0) {
 				value = readCodecObject(registry, buffer);
-			} else if (charsEqual(identifierBuilder, StateSerializer.ARRAY_LIST_WIRE_NAME)) {
+			} else if (CharSequence.compare(identifierBuilder, StateSerializer.ARRAY_LIST_WIRE_NAME) == 0) {
 				value = readArrayList(registry, buffer);
 			} else {
 				throw new IllegalArgumentException("Unsupported node identifier: " + identifierBuilder);
@@ -190,14 +190,6 @@ public final class StateDeserializer {
 		for (int i = 0; i < length; i++) {
 			destination.append((char) (buffer.get() & 0xff));
 		}
-	}
-
-	private static boolean charsEqual(CharSequence left, CharSequence right) {
-		if (left.length() != right.length()) return false;
-		for (int i = 0; i < left.length(); i++) {
-			if (left.charAt(i) != right.charAt(i)) return false;
-		}
-		return true;
 	}
 
 	private static int readNonNegativeInt(ByteBuffer buffer, String description) {
