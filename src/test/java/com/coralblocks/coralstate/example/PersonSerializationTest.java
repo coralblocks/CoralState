@@ -10,9 +10,7 @@ import com.coralblocks.coralds.list.ArrayList;
 import com.coralblocks.coralpool.ArrayObjectPool;
 import com.coralblocks.coralpool.ObjectPool;
 import com.coralblocks.coralstate.State;
-import com.coralblocks.coralstate.StateDeserializer;
 import com.coralblocks.coralstate.StateRegistry;
-import com.coralblocks.coralstate.StateSerializer;
 
 public class PersonSerializationTest {
 
@@ -32,10 +30,11 @@ public class PersonSerializationTest {
 		original.put("people", people);
 
 		ByteBuffer buffer = ByteBuffer.allocate(1024);
-		int bytesWritten = new StateSerializer().write(original, buffer);
+		int bytesWritten = original.writeTo(buffer);
 		buffer.flip();
 
-		State restored = new StateDeserializer().read(registry, buffer);
+		State restored = new State(registry);
+		int bytesRead = restored.readFrom(buffer);
 
 		System.out.println("Before: " + original);
 		System.out.println("After:  " + restored);
@@ -43,6 +42,7 @@ public class PersonSerializationTest {
 		assertEquals(original, restored);
 		assertEquals(original.hashCode(), restored.hashCode());
 		assertEquals(original.toString(), restored.toString());
+		assertEquals(bytesWritten, bytesRead);
 		assertEquals(bytesWritten, buffer.position());
 		assertEquals(0, buffer.remaining());
 

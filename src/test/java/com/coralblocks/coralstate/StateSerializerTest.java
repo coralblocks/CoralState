@@ -18,13 +18,11 @@ import com.coralblocks.coralstate.example.PersonCodec;
 public class StateSerializerTest {
 
 	private StateRegistry registry;
-	private StateSerializer serializer;
 
 	@Before
 	public void setUp() {
 		registry = new StateRegistry();
 		registry.register(new PersonCodec(), new ArrayObjectPool<Person>(4, Person.class));
-		serializer = new StateSerializer();
 	}
 
 	@Test
@@ -33,7 +31,7 @@ public class StateSerializerTest {
 		state.put("person", new Person("Alice", 42));
 		ByteBuffer buffer = ByteBuffer.allocate(256);
 
-		int written = serializer.write(state, buffer);
+		int written = state.writeTo(buffer);
 
 		assertEquals(buffer.position(), written);
 		buffer.flip();
@@ -55,7 +53,7 @@ public class StateSerializerTest {
 		state.put("people", people);
 		ByteBuffer buffer = ByteBuffer.allocate(512);
 
-		serializer.write(state, buffer);
+		state.writeTo(buffer);
 
 		buffer.flip();
 		assertHeader(buffer, 1);
@@ -77,7 +75,7 @@ public class StateSerializerTest {
 		state.put("ação", new Person("Coral", 1));
 		ByteBuffer buffer = ByteBuffer.allocate(256);
 
-		serializer.write(state, buffer);
+		state.writeTo(buffer);
 
 		buffer.flip();
 		assertHeader(buffer, 1);
@@ -94,7 +92,7 @@ public class StateSerializerTest {
 		buffer.position(7);
 
 		try {
-			serializer.write(state, buffer);
+			state.writeTo(buffer);
 			fail("Expected cyclic ArrayList to be rejected");
 		} catch (IllegalArgumentException e) {
 			assertTrue(e.getMessage().contains("Cyclic ArrayList"));
@@ -109,7 +107,7 @@ public class StateSerializerTest {
 		state.put("unsupported", new Object());
 
 		try {
-			serializer.write(state, ByteBuffer.allocate(128));
+			state.writeTo(ByteBuffer.allocate(128));
 			fail("Expected unsupported type to be rejected");
 		} catch (IllegalArgumentException e) {
 			assertTrue(e.getMessage().contains(Object.class.getName()));
@@ -122,7 +120,7 @@ public class StateSerializerTest {
 		state.put("person", new Person("Alice", 42));
 		ByteBuffer buffer = ByteBuffer.allocate(256).order(ByteOrder.LITTLE_ENDIAN);
 
-		serializer.write(state, buffer);
+		state.writeTo(buffer);
 
 		assertEquals(ByteOrder.LITTLE_ENDIAN, buffer.order());
 		buffer.flip();

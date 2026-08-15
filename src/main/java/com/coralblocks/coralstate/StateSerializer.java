@@ -22,13 +22,13 @@ import com.coralblocks.coralproto.Proto;
  * type-specific payload. The supported identifiers are currently {@code CoralProto} and
  * {@code ArrayList}.</p>
  */
-public final class StateSerializer {
+final class StateSerializer {
 
 	/** The four one-byte characters that identify the beginning of a serialized State. */
-	public static final String MAGIC = "CSTA";
+	static final String MAGIC = "CSTA";
 
 	/** The current State wire-format version. */
-	public static final short FORMAT_VERSION = 1;
+	static final short FORMAT_VERSION = 1;
 
 	static final String CORAL_PROTO_WIRE_NAME = "CoralProto";
 	static final String ARRAY_LIST_WIRE_NAME = "ArrayList";
@@ -46,7 +46,7 @@ public final class StateSerializer {
 	 * @return the number of bytes written
 	 * @throws IllegalArgumentException if an unsupported value or cyclic container is found
 	 */
-	public int write(State state, ByteBuffer buffer) {
+	int write(State state, ByteBuffer buffer) {
 		if (state == null) throw new IllegalArgumentException("State cannot be null");
 		if (buffer == null) throw new IllegalArgumentException("ByteBuffer cannot be null");
 

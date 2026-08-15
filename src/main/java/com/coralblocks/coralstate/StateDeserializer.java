@@ -15,25 +15,12 @@ import com.coralblocks.coralproto.Proto;
  * <p>This deserializer is deliberately single-threaded and is not thread-safe. The initial
  * implementation supports the {@code CoralProto} and {@code ArrayList} wire identifiers.</p>
  */
-public final class StateDeserializer {
+final class StateDeserializer {
 
 	private static final int PROTO_HEADER_LENGTH = 4;
 
 	private final StringBuilder keyBuilder = new StringBuilder();
 	private final StringBuilder identifierBuilder = new StringBuilder();
-
-	/**
-	 * Creates and reads a new State using the supplied registry.
-	 *
-	 * @param registry the registry containing the codecs and object pools
-	 * @param buffer the source buffer
-	 * @return the restored State
-	 */
-	public State read(StateRegistry registry, ByteBuffer buffer) {
-		State state = new State(registry);
-		read(state, buffer);
-		return state;
-	}
 
 	/**
 	 * Reads a serialized State into an empty destination State.
@@ -46,7 +33,7 @@ public final class StateDeserializer {
 	 * @param buffer the source buffer
 	 * @return the number of bytes consumed
 	 */
-	public int read(State state, ByteBuffer buffer) {
+	int read(State state, ByteBuffer buffer) {
 		if (state == null) throw new IllegalArgumentException("State cannot be null");
 		if (buffer == null) throw new IllegalArgumentException("ByteBuffer cannot be null");
 		if (!state.isEmpty()) throw new IllegalArgumentException("Destination State must be empty");

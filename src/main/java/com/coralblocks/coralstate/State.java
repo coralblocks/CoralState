@@ -1,5 +1,6 @@
 package com.coralblocks.coralstate;
 
+import java.nio.ByteBuffer;
 import java.util.Iterator;
 
 import com.coralblocks.coralds.map.CharSequenceMap;
@@ -8,6 +9,8 @@ public class State {
 
 	private final CharSequenceMap<Object> values = new CharSequenceMap<>();
 	private final StateRegistry registry;
+	private final StateSerializer serializer = new StateSerializer();
+	private final StateDeserializer deserializer = new StateDeserializer();
 	
 	public State(StateRegistry registry) {
 		if (registry == null) throw new IllegalArgumentException("StateRegistry cannot be null");
@@ -40,6 +43,28 @@ public class State {
 
 	public boolean isEmpty() {
 		return values.isEmpty();
+	}
+
+	/**
+	 * Writes this State at the buffer's current position.
+	 *
+	 * @param buffer the destination buffer
+	 * @return the number of bytes written
+	 * @throws IllegalArgumentException if the buffer is null or this State contains an unsupported value
+	 */
+	public int writeTo(ByteBuffer buffer) {
+		return serializer.write(this, buffer);
+	}
+
+	/**
+	 * Reads a serialized State from the buffer's current position into this empty State.
+	 *
+	 * @param buffer the source buffer
+	 * @return the number of bytes consumed
+	 * @throws IllegalArgumentException if the buffer is null, this State is not empty, or the data is invalid
+	 */
+	public int readFrom(ByteBuffer buffer) {
+		return deserializer.read(this, buffer);
 	}
 
 	@Override
