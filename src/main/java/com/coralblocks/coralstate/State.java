@@ -5,6 +5,15 @@ import com.coralblocks.coralds.map.LinkedMap;
 public class State {
 
 	private final LinkedMap<Object, Object> values = new LinkedMap<>();
+	private final StateRegistry registry;
+	
+	public State(StateRegistry registry) {
+		this.registry = registry;
+	}
+	
+	public StateRegistry getRegistry() {
+		return registry;
+	}
 	
 	public void put(Object key, Object value) {
 		values.put(key, value);
