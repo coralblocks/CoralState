@@ -37,9 +37,11 @@ final class StateDeserializer {
 
 	private static final int PROTO_HEADER_LENGTH = 4;
 	private static final int INITIAL_KEY_DEPTH = 4;
+	private static final int INITIAL_ROLLBACK_CAPACITY = 16;
 
 	private final ArrayList<StringBuilder> keyBuilders = new ArrayList<>(INITIAL_KEY_DEPTH);
 	private final StringBuilder identifierBuilder = new StringBuilder(StateSerializer.MAX_WIRE_NAME_LENGTH);
+	private final RollbackJournal rollbackJournal = new RollbackJournal();
 
 	StateDeserializer() {
 		for (int i = 0; i < INITIAL_KEY_DEPTH; i++) {
@@ -51,6 +53,7 @@ final class StateDeserializer {
 		if (state == null) throw new IllegalArgumentException("State cannot be null");
 		if (buffer == null) throw new IllegalArgumentException("ByteBuffer cannot be null");
 		if (!state.isEmpty()) throw new IllegalArgumentException("Destination State must be empty");
+		rollbackJournal.begin();
 
 		int startPosition = buffer.position();
 		ByteOrder originalOrder = buffer.order();
@@ -67,11 +70,16 @@ final class StateDeserializer {
 				StringBuilder keyBuilder = getKeyBuilder(0, CharSequenceMap.DEFAULT_MAX_KEY_LENGTH);
 				readChars(buffer, keyBuilder, "State key length", CharSequenceMap.DEFAULT_MAX_KEY_LENGTH);
 				Object value = readValue(state.getRegistry(), buffer, 1);
-				state.put(keyBuilder, value);
+				if (state.internalValues().put(keyBuilder, value) != null) {
+					throw new IllegalArgumentException("Duplicate State key: " + keyBuilder);
+				}
 			}
-			return buffer.position() - startPosition;
+			int bytesRead = buffer.position() - startPosition;
+			rollbackJournal.commit();
+			return bytesRead;
 		} catch (RuntimeException e) {
 			state.internalValues().clear();
+			rollbackJournal.rollback();
 			buffer.position(startPosition);
 			throw e;
 		} finally {
@@ -204,19 +212,21 @@ final class StateDeserializer {
 			int keyEnd = keyStart + keyLength;
 			buffer.position(keyEnd);
 			Object value = readValue(registry, buffer, keyDepth);
-			putByteBufferKey(map, buffer, keyStart, keyEnd, value);
+			if (putByteBufferKey(map, buffer, keyStart, keyEnd, value) != null) {
+				throw new IllegalArgumentException("Duplicate ByteBufferMap key");
+			}
 		}
 		return map;
 	}
 
-	private static void putByteBufferKey(ByteBufferMap<Object> map, ByteBuffer buffer,
+	private static Object putByteBufferKey(ByteBufferMap<Object> map, ByteBuffer buffer,
 			int keyStart, int keyEnd, Object value) {
 		int valueEnd = buffer.position();
 		int originalLimit = buffer.limit();
 		try {
 			buffer.position(keyStart);
 			buffer.limit(keyEnd);
-			map.put(buffer, value);
+			return map.put(buffer, value);
 		} finally {
 			buffer.limit(originalLimit);
 			buffer.position(valueEnd);
@@ -228,7 +238,9 @@ final class StateDeserializer {
 		ByteMap<Object> map = new ByteMap<>();
 		for (int i = 0; i < size; i++) {
 			byte key = readByte(buffer, "ByteMap key");
-			map.put(key, readValue(registry, buffer, keyDepth));
+			if (map.put(key, readValue(registry, buffer, keyDepth)) != null) {
+				throw new IllegalArgumentException("Duplicate ByteMap key: " + key);
+			}
 		}
 		return map;
 	}
@@ -238,7 +250,9 @@ final class StateDeserializer {
 		CharMap<Object> map = new CharMap<>();
 		for (int i = 0; i < size; i++) {
 			char key = (char) (readByte(buffer, "CharMap key") & 0xff);
-			map.put(key, readValue(registry, buffer, keyDepth));
+			if (map.put(key, readValue(registry, buffer, keyDepth)) != null) {
+				throw new IllegalArgumentException("Duplicate CharMap key: " + key);
+			}
 		}
 		return map;
 	}
@@ -253,7 +267,9 @@ final class StateDeserializer {
 			StringBuilder keyBuilder = getKeyBuilder(keyDepth, maxKeyLength);
 			readChars(buffer, keyBuilder, "CharSequenceMap key length", maxKeyLength);
 			Object value = readValue(registry, buffer, keyDepth + 1);
-			map.put(keyBuilder, value);
+			if (map.put(keyBuilder, value) != null) {
+				throw new IllegalArgumentException("Duplicate CharSequenceMap key: " + keyBuilder);
+			}
 		}
 		return map;
 	}
@@ -265,7 +281,9 @@ final class StateDeserializer {
 		IdentityMap<Object, Object> map = new IdentityMap<>(initialCapacity, loadFactor);
 		for (int i = 0; i < size; i++) {
 			Object key = readValue(registry, buffer, keyDepth);
-			map.put(key, readValue(registry, buffer, keyDepth));
+			if (map.put(key, readValue(registry, buffer, keyDepth)) != null) {
+				throw new IllegalArgumentException("Duplicate IdentityMap key");
+			}
 		}
 		return map;
 	}
@@ -277,7 +295,9 @@ final class StateDeserializer {
 		IntMap<Object> map = new IntMap<>(initialCapacity, loadFactor);
 		for (int i = 0; i < size; i++) {
 			int key = readInt(buffer, "IntMap key");
-			map.put(key, readValue(registry, buffer, keyDepth));
+			if (map.put(key, readValue(registry, buffer, keyDepth)) != null) {
+				throw new IllegalArgumentException("Duplicate IntMap key: " + key);
+			}
 		}
 		return map;
 	}
@@ -289,7 +309,9 @@ final class StateDeserializer {
 		LinkedMap<Object, Object> map = new LinkedMap<>(initialCapacity, loadFactor);
 		for (int i = 0; i < size; i++) {
 			Object key = readValue(registry, buffer, keyDepth);
-			map.put(key, readValue(registry, buffer, keyDepth));
+			if (map.put(key, readValue(registry, buffer, keyDepth)) != null) {
+				throw new IllegalArgumentException("Duplicate LinkedMap key");
+			}
 		}
 		return map;
 	}
@@ -301,7 +323,9 @@ final class StateDeserializer {
 		LongMap<Object> map = new LongMap<>(initialCapacity, loadFactor);
 		for (int i = 0; i < size; i++) {
 			long key = readLong(buffer, "LongMap key");
-			map.put(key, readValue(registry, buffer, keyDepth));
+			if (map.put(key, readValue(registry, buffer, keyDepth)) != null) {
+				throw new IllegalArgumentException("Duplicate LongMap key: " + key);
+			}
 		}
 		return map;
 	}
@@ -313,7 +337,9 @@ final class StateDeserializer {
 		Map<Object, Object> map = new Map<>(initialCapacity, loadFactor);
 		for (int i = 0; i < size; i++) {
 			Object key = readValue(registry, buffer, keyDepth);
-			map.put(key, readValue(registry, buffer, keyDepth));
+			if (map.put(key, readValue(registry, buffer, keyDepth)) != null) {
+				throw new IllegalArgumentException("Duplicate Map key");
+			}
 		}
 		return map;
 	}
@@ -323,7 +349,11 @@ final class StateDeserializer {
 		float loadFactor = readFloat(buffer, "IdentitySet load factor");
 		int size = readNonNegativeInt(buffer, "IdentitySet size");
 		IdentitySet<Object> set = new IdentitySet<>(initialCapacity, loadFactor);
-		for (int i = 0; i < size; i++) set.add(readValue(registry, buffer, keyDepth));
+		for (int i = 0; i < size; i++) {
+			if (!set.add(readValue(registry, buffer, keyDepth))) {
+				throw new IllegalArgumentException("Duplicate IdentitySet element");
+			}
+		}
 		return set;
 	}
 
@@ -332,7 +362,10 @@ final class StateDeserializer {
 		float loadFactor = readFloat(buffer, "IntSet load factor");
 		int size = readNonNegativeInt(buffer, "IntSet size");
 		IntSet set = new IntSet(initialCapacity, loadFactor);
-		for (int i = 0; i < size; i++) set.add(readInt(buffer, "IntSet element"));
+		for (int i = 0; i < size; i++) {
+			int element = readInt(buffer, "IntSet element");
+			if (!set.add(element)) throw new IllegalArgumentException("Duplicate IntSet element: " + element);
+		}
 		return set;
 	}
 
@@ -341,7 +374,11 @@ final class StateDeserializer {
 		float loadFactor = readFloat(buffer, "LinkedSet load factor");
 		int size = readNonNegativeInt(buffer, "LinkedSet size");
 		LinkedSet<Object> set = new LinkedSet<>(initialCapacity, loadFactor);
-		for (int i = 0; i < size; i++) set.add(readValue(registry, buffer, keyDepth));
+		for (int i = 0; i < size; i++) {
+			if (!set.add(readValue(registry, buffer, keyDepth))) {
+				throw new IllegalArgumentException("Duplicate LinkedSet element");
+			}
+		}
 		return set;
 	}
 
@@ -350,7 +387,10 @@ final class StateDeserializer {
 		float loadFactor = readFloat(buffer, "LongSet load factor");
 		int size = readNonNegativeInt(buffer, "LongSet size");
 		LongSet set = new LongSet(initialCapacity, loadFactor);
-		for (int i = 0; i < size; i++) set.add(readLong(buffer, "LongSet element"));
+		for (int i = 0; i < size; i++) {
+			long element = readLong(buffer, "LongSet element");
+			if (!set.add(element)) throw new IllegalArgumentException("Duplicate LongSet element: " + element);
+		}
 		return set;
 	}
 
@@ -359,7 +399,11 @@ final class StateDeserializer {
 		float loadFactor = readFloat(buffer, "Set load factor");
 		int size = readNonNegativeInt(buffer, "Set size");
 		Set<Object> set = new Set<>(initialCapacity, loadFactor);
-		for (int i = 0; i < size; i++) set.add(readValue(registry, buffer, keyDepth));
+		for (int i = 0; i < size; i++) {
+			if (!set.add(readValue(registry, buffer, keyDepth))) {
+				throw new IllegalArgumentException("Duplicate Set element");
+			}
+		}
 		return set;
 	}
 
@@ -384,10 +428,49 @@ final class StateDeserializer {
 		Object object = pool.get();
 		try {
 			codec.decode(proto, object);
+			rollbackJournal.record(pool, object);
 			return object;
 		} catch (RuntimeException e) {
 			pool.release(object);
 			throw e;
+		}
+	}
+
+	/**
+	 * Retains decoded codec objects and their pools until the complete State has been read.
+	 * The journal and its CoralDS lists are cached and reused by this deserializer.
+	 */
+	private static final class RollbackJournal {
+
+		private final ArrayList<ObjectPool<?>> pools = new ArrayList<>(INITIAL_ROLLBACK_CAPACITY);
+		private final ArrayList<Object> objects = new ArrayList<>(INITIAL_ROLLBACK_CAPACITY);
+
+		private void begin() {
+			if (!pools.isEmpty() || !objects.isEmpty()) {
+				throw new IllegalStateException("StateDeserializer rollback journal was not cleared");
+			}
+		}
+
+		private void record(ObjectPool<?> pool, Object object) {
+			pools.add(pool);
+			objects.add(object);
+		}
+
+		private void commit() {
+			pools.clear();
+			objects.clear();
+		}
+
+		private void rollback() {
+			for (int i = objects.size() - 1; i >= 0; i--) {
+				release(pools.get(i), objects.get(i));
+			}
+			commit();
+		}
+
+		@SuppressWarnings({ "rawtypes", "unchecked" })
+		private static void release(ObjectPool pool, Object object) {
+			pool.release(object);
 		}
 	}
 
