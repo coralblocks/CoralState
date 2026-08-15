@@ -1,11 +1,10 @@
 package com.coralblocks.coralstate;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
+import com.coralblocks.coralds.map.LinkedMap;
 
 public class State {
 
-	private final Map<Object, Object> values = new LinkedHashMap<>();
+	private final LinkedMap<Object, Object> values = new LinkedMap<>();
 	
 	public void put(Object key, Object value) {
 		values.put(key, value);
@@ -27,7 +26,7 @@ public class State {
 		return values.isEmpty();
 	}
 
-	Map<Object, Object> internalValues() {
+	LinkedMap<Object, Object> internalValues() {
 		return values;
 	}
 }
