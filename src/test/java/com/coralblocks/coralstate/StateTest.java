@@ -36,4 +36,20 @@ public class StateTest {
 	public void rejectsNullRegistry() {
 		new State(null);
 	}
+
+	@Test
+	public void comparesAndPrintsEntriesByValue() {
+		State first = new State(new StateRegistry());
+		first.put("name", "Coral");
+		first.put("version", Integer.valueOf(1));
+
+		State second = new State(new StateRegistry());
+		second.put(new StringBuilder("version"), Integer.valueOf(1));
+		second.put(new StringBuilder("name"), new String("Coral"));
+
+		assertEquals(first, second);
+		assertEquals(first.hashCode(), second.hashCode());
+		assertTrue(first.toString().contains("name=Coral"));
+		assertTrue(first.toString().contains("version=1"));
+	}
 }
