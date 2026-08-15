@@ -7,7 +7,7 @@ import com.coralblocks.coralproto.field.TypeField;
 import com.coralblocks.coralproto.field.VarCharsField;
 import com.coralblocks.coralstate.StateCodec;
 
-final class PersonCodec implements StateCodec<Person, PersonCodec.PersonProto> {
+public final class PersonCodec implements StateCodec<Person, PersonCodec.PersonProto> {
 	
 	private final PersonProto personProto = new PersonProto();
 	
@@ -33,7 +33,7 @@ final class PersonCodec implements StateCodec<Person, PersonCodec.PersonProto> {
 		person.setAge(personProto.age.get());
 	}
 
-	static final class PersonProto extends AbstractProto {
+	public static final class PersonProto extends AbstractProto {
 
 		public static final char TYPE = 'P';
 		public static final char SUBTYPE = 'R';
