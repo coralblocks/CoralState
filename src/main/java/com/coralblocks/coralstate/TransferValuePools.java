@@ -204,8 +204,7 @@ final class TransferValuePools {
 		@Override
 		public boolean equals(Object o) {
 			if (o == this) return true;
-			if (!(o instanceof MutableCharSequence)) return false;
-			MutableCharSequence other = (MutableCharSequence) o;
+			if (!(o instanceof MutableCharSequence other)) return false;
 			return CharSequence.compare(value, other.value) == 0;
 		}
 
@@ -259,8 +258,7 @@ final class TransferValuePools {
 		@Override
 		public boolean equals(Object o) {
 			if (o == this) return true;
-			if (!(o instanceof MutableBytes)) return false;
-			MutableBytes other = (MutableBytes) o;
+			if (!(o instanceof MutableBytes other)) return false;
 			if (length != other.length) return false;
 			for (int i = 0; i < length; i++) {
 				if (writable.get(i) != other.writable.get(i)) return false;

@@ -249,14 +249,10 @@ final class StateSerializer {
 	private void validateObjectMap(Object mapObject, StateRegistry registry) {
 		enterContainerForValidation(mapObject);
 		try {
-			Iterator<?> iter = mapObject instanceof IdentityMap<?, ?> identityMap ? identityMap.iterator()
-					: mapObject instanceof LinkedMap<?, ?> linkedMap ? linkedMap.iterator()
-					: ((Map<?, ?>) mapObject).iterator();
+			Iterator<?> iter = getObjectMapIterator(mapObject);
 			while(iter.hasNext()) {
 				Object value = iter.next();
-				Object key = mapObject instanceof IdentityMap<?, ?> identityMap ? identityMap.getCurrIteratorKey()
-						: mapObject instanceof LinkedMap<?, ?> linkedMap ? linkedMap.getCurrIteratorKey()
-						: ((Map<?, ?>) mapObject).getCurrIteratorKey();
+				Object key = getCurrentObjectMapKey(mapObject);
 				validateValue(key, registry);
 				validateValue(value, registry);
 			}
@@ -802,18 +798,11 @@ final class StateSerializer {
 		enterContainer(mapObject, "serializing");
 		try {
 			int node = beginNode(wireName, buffer);
-			Iterator<?> iter;
-			if (mapObject instanceof IdentityMap<?, ?>) iter = ((IdentityMap<?, ?>) mapObject).iterator();
-			else if (mapObject instanceof LinkedMap<?, ?>) iter = ((LinkedMap<?, ?>) mapObject).iterator();
-			else iter = ((Map<?, ?>) mapObject).iterator();
-			int size = mapObject instanceof IdentityMap<?, ?> ? ((IdentityMap<?, ?>) mapObject).size()
-					: mapObject instanceof LinkedMap<?, ?> ? ((LinkedMap<?, ?>) mapObject).size() : ((Map<?, ?>) mapObject).size();
-			writeMapConfiguration(initialCapacity, loadFactor, size, buffer);
+			Iterator<?> iter = getObjectMapIterator(mapObject);
+			writeMapConfiguration(initialCapacity, loadFactor, getObjectMapSize(mapObject), buffer);
 			while(iter.hasNext()) {
 				Object value = iter.next();
-				Object key = mapObject instanceof IdentityMap<?, ?> ? ((IdentityMap<?, ?>) mapObject).getCurrIteratorKey()
-						: mapObject instanceof LinkedMap<?, ?> ? ((LinkedMap<?, ?>) mapObject).getCurrIteratorKey()
-						: ((Map<?, ?>) mapObject).getCurrIteratorKey();
+				Object key = getCurrentObjectMapKey(mapObject);
 				writeValue(key, registry, buffer);
 				writeValue(value, registry, buffer);
 			}
@@ -825,18 +814,36 @@ final class StateSerializer {
 		enterContainer(mapObject, "measuring");
 		try {
 			int length = addLength(nodeBaseLength(wireName), mapConfigurationLength());
-			Iterator<?> iter = mapObject instanceof IdentityMap<?, ?> ? ((IdentityMap<?, ?>) mapObject).iterator()
-					: mapObject instanceof LinkedMap<?, ?> ? ((LinkedMap<?, ?>) mapObject).iterator() : ((Map<?, ?>) mapObject).iterator();
+			Iterator<?> iter = getObjectMapIterator(mapObject);
 			while(iter.hasNext()) {
 				Object value = iter.next();
-				Object key = mapObject instanceof IdentityMap<?, ?> ? ((IdentityMap<?, ?>) mapObject).getCurrIteratorKey()
-						: mapObject instanceof LinkedMap<?, ?> ? ((LinkedMap<?, ?>) mapObject).getCurrIteratorKey()
-						: ((Map<?, ?>) mapObject).getCurrIteratorKey();
+				Object key = getCurrentObjectMapKey(mapObject);
 				length = addLength(length, getValueLength(key, registry));
 				length = addLength(length, getValueLength(value, registry));
 			}
 			return length;
 		} finally { exitContainer(mapObject); }
+	}
+
+	private static Iterator<?> getObjectMapIterator(Object mapObject) {
+		if (mapObject instanceof IdentityMap<?, ?> map) return map.iterator();
+		if (mapObject instanceof LinkedMap<?, ?> map) return map.iterator();
+		if (mapObject instanceof Map<?, ?> map) return map.iterator();
+		throw new IllegalArgumentException("Unsupported object map type: " + mapObject.getClass().getName());
+	}
+
+	private static int getObjectMapSize(Object mapObject) {
+		if (mapObject instanceof IdentityMap<?, ?> map) return map.size();
+		if (mapObject instanceof LinkedMap<?, ?> map) return map.size();
+		if (mapObject instanceof Map<?, ?> map) return map.size();
+		throw new IllegalArgumentException("Unsupported object map type: " + mapObject.getClass().getName());
+	}
+
+	private static Object getCurrentObjectMapKey(Object mapObject) {
+		if (mapObject instanceof IdentityMap<?, ?> map) return map.getCurrIteratorKey();
+		if (mapObject instanceof LinkedMap<?, ?> map) return map.getCurrIteratorKey();
+		if (mapObject instanceof Map<?, ?> map) return map.getCurrIteratorKey();
+		throw new IllegalArgumentException("Unsupported object map type: " + mapObject.getClass().getName());
 	}
 
 	private void writeObjectSet(Iterable<?> set, int initialCapacity, float loadFactor, int size, String wireName,

@@ -34,12 +34,12 @@ public class State {
 	public void put(CharSequence key, Object value) {
 		checkKey(key);
 		if (value == null) throw new IllegalArgumentException("State value cannot be null");
-		if (!(value instanceof String) && value instanceof CharSequence) {
-			putCharSequence(key, (CharSequence) value);
+		if (!(value instanceof String) && value instanceof CharSequence charSequence) {
+			putCharSequence(key, charSequence);
 			return;
 		}
-		if (value instanceof ByteBuffer) {
-			putByteBuffer(key, (ByteBuffer) value);
+		if (value instanceof ByteBuffer byteBuffer) {
+			putByteBuffer(key, byteBuffer);
 			return;
 		}
 		serializer.validateForPut(value, registry);
@@ -161,7 +161,7 @@ public class State {
 	public CharSequence getCharSequence(CharSequence key) {
 		checkKey(key);
 		Object value = values.get(key);
-		if (value instanceof String) return (String) value;
+		if (value instanceof String string) return string;
 		return transferValues.getCharSequence(values, key);
 	}
 
@@ -234,7 +234,10 @@ public class State {
 	public CharSequence removeCharSequence(CharSequence key) {
 		checkKey(key);
 		Object value = values.get(key);
-		if (value instanceof String) return (String) values.remove(key);
+		if (value instanceof String string) {
+			values.remove(key);
+			return string;
+		}
 		return transferValues.removeCharSequence(values, key);
 	}
 
