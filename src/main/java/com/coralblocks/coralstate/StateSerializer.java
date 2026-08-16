@@ -36,8 +36,8 @@ import com.coralblocks.coralproto.Proto;
  * mutable Proto instance owned by each registered {@link StateCodec}.</p>
  *
  * <p>Each value node contains its byte length followed by one readable identifier and its
- * type-specific payload. Strings, primitives, registered codec objects, and every concrete
- * CoralDS collection are supported as explicit wire types.</p>
+ * type-specific payload. Strings, pooled scalar-transfer values, primitives, registered codec
+ * objects, and every concrete CoralDS collection are supported as explicit wire types.</p>
  */
 final class StateSerializer {
 
@@ -45,6 +45,8 @@ final class StateSerializer {
 	static final short FORMAT_VERSION = 1;
 	static final String CORAL_PROTO_WIRE_NAME = "CoralProto";
 	static final String STRING_WIRE_NAME = "String";
+	static final String CHAR_SEQUENCE_WIRE_NAME = "CharSequence";
+	static final String BYTE_BUFFER_WIRE_NAME = "ByteBuffer";
 	static final String BOOLEAN_WIRE_NAME = "Boolean";
 	static final String BYTE_WIRE_NAME = "Byte";
 	static final String CHAR_WIRE_NAME = "Char";
@@ -142,6 +144,13 @@ final class StateSerializer {
 	private void writeValue(Object value, StateRegistry registry, ByteBuffer buffer) {
 		if (value == null) throw new IllegalStateException("State values cannot be null");
 
+		int transferType = TransferValuePools.typeOf(value);
+		if (transferType != TransferValuePools.NOT_TRANSFER_VALUE) {
+			requireTopLevelTransferValue();
+			writeTransferValue(value, transferType, buffer);
+			return;
+		}
+
 		int primitiveType = PrimitiveValuePools.typeOf(value);
 		if (primitiveType != PrimitiveValuePools.NOT_PRIMITIVE) {
 			writePrimitive(value, primitiveType, buffer);
@@ -177,6 +186,12 @@ final class StateSerializer {
 	private int getValueLength(Object value, StateRegistry registry) {
 		if (value == null) throw new IllegalStateException("State values cannot be null");
 
+		int transferType = TransferValuePools.typeOf(value);
+		if (transferType != TransferValuePools.NOT_TRANSFER_VALUE) {
+			requireTopLevelTransferValue();
+			return getTransferValueLength(value, transferType);
+		}
+
 		int primitiveType = PrimitiveValuePools.typeOf(value);
 		if (primitiveType != PrimitiveValuePools.NOT_PRIMITIVE) {
 			return getPrimitiveLength(primitiveType);
@@ -211,6 +226,9 @@ final class StateSerializer {
 	private void validateValue(Object value, StateRegistry registry) {
 		if (value == null) throw new IllegalArgumentException("State values cannot be null");
 		if (PrimitiveValuePools.typeOf(value) != PrimitiveValuePools.NOT_PRIMITIVE) return;
+		if (TransferValuePools.typeOf(value) != TransferValuePools.NOT_TRANSFER_VALUE) {
+			throw new IllegalArgumentException("Pooled scalar-transfer values are only supported at the top level");
+		}
 
 		Class<?> type = value.getClass();
 		if (type == String.class) return;
@@ -284,6 +302,60 @@ final class StateSerializer {
 	private static int getStringLength(String value) {
 		int length = addLength(nodeBaseLength(STRING_WIRE_NAME), Integer.BYTES);
 		return addLength(length, multiplyLength(value.length(), Character.BYTES));
+	}
+
+	private void writeTransferValue(Object value, int transferType, ByteBuffer buffer) {
+		switch(transferType) {
+			case TransferValuePools.CHAR_SEQUENCE:
+				writeCharSequence(value, buffer);
+				break;
+			case TransferValuePools.BYTE_BUFFER:
+				writeByteBuffer(value, buffer);
+				break;
+			default:
+				throw new IllegalArgumentException("Unsupported scalar-transfer State value type: "
+						+ transferType);
+		}
+	}
+
+	private void writeCharSequence(Object value, ByteBuffer buffer) {
+		int length = TransferValuePools.charSequenceLength(value);
+		int node = beginNode(CHAR_SEQUENCE_WIRE_NAME, buffer);
+		buffer.putInt(length);
+		for (int i = 0; i < length; i++) {
+			buffer.putChar(TransferValuePools.charSequenceCharAt(value, i));
+		}
+		finishNode(node, buffer);
+	}
+
+	private void writeByteBuffer(Object value, ByteBuffer buffer) {
+		int length = TransferValuePools.byteBufferLength(value);
+		int node = beginNode(BYTE_BUFFER_WIRE_NAME, buffer);
+		buffer.putInt(length);
+		TransferValuePools.writeByteBuffer(value, buffer);
+		finishNode(node, buffer);
+	}
+
+	private static int getTransferValueLength(Object value, int transferType) {
+		switch(transferType) {
+			case TransferValuePools.CHAR_SEQUENCE:
+				int charLength = addLength(nodeBaseLength(CHAR_SEQUENCE_WIRE_NAME), Integer.BYTES);
+				return addLength(charLength, multiplyLength(
+						TransferValuePools.charSequenceLength(value), Character.BYTES));
+			case TransferValuePools.BYTE_BUFFER:
+				int byteLength = addLength(nodeBaseLength(BYTE_BUFFER_WIRE_NAME), Integer.BYTES);
+				return addLength(byteLength, TransferValuePools.byteBufferLength(value));
+			default:
+				throw new IllegalArgumentException("Unsupported scalar-transfer State value type: "
+						+ transferType);
+		}
+	}
+
+	private void requireTopLevelTransferValue() {
+		if (!activeContainers.isEmpty()) {
+			throw new IllegalStateException("CharSequence and ByteBuffer transfer values are only supported "
+					+ "at the top level of State");
+		}
 	}
 
 	private void writePrimitive(Object value, int primitiveType, ByteBuffer buffer) {

@@ -30,9 +30,9 @@ import com.coralblocks.coralproto.Proto;
 /**
  * Deserializes a {@link State} written by {@link StateSerializer}.
  *
- * <p>This deserializer is deliberately single-threaded and is not thread-safe. Strings,
- * primitives, registered codec objects, and every concrete CoralDS collection are supported as
- * explicit wire types.</p>
+ * <p>This deserializer is deliberately single-threaded and is not thread-safe. Strings, pooled
+ * scalar-transfer values, primitives, registered codec objects, and every concrete CoralDS
+ * collection are supported as explicit wire types.</p>
  */
 final class StateDeserializer {
 
@@ -46,6 +46,7 @@ final class StateDeserializer {
 	private final StringBuilder stringBuilder = new StringBuilder(INITIAL_STRING_CAPACITY);
 	private final RollbackJournal rollbackJournal = new RollbackJournal();
 	private State targetState;
+	private int valueDepth;
 
 	StateDeserializer() {
 		for (int i = 0; i < INITIAL_KEY_DEPTH; i++) {
@@ -57,6 +58,7 @@ final class StateDeserializer {
 		if (state == null) throw new IllegalArgumentException("State cannot be null");
 		if (buffer == null) throw new IllegalArgumentException("ByteBuffer cannot be null");
 		if (!state.isEmpty()) throw new IllegalArgumentException("Destination State must be empty");
+		if (valueDepth != 0) throw new IllegalStateException("StateDeserializer value depth was not cleared");
 		rollbackJournal.begin();
 		targetState = state;
 
@@ -95,27 +97,40 @@ final class StateDeserializer {
 	}
 
 	private Object readValue(StateRegistry registry, ByteBuffer buffer, int keyDepth) {
-		int nodeLength = readNonNegativeInt(buffer, "node length");
-		if (nodeLength > buffer.remaining()) throw new IllegalArgumentException("Invalid node length: " + nodeLength);
-
-		int nodeEnd = buffer.position() + nodeLength;
-		int originalLimit = buffer.limit();
-		buffer.limit(nodeEnd);
+		valueDepth++;
 		try {
-			readChars(buffer, identifierBuilder, "node identifier length", StateSerializer.MAX_WIRE_NAME_LENGTH);
-			Object value = readIdentifiedValue(registry, buffer, keyDepth);
-			if (buffer.position() != nodeEnd) {
-				throw new IllegalArgumentException("Node was not fully consumed: remaining=" + buffer.remaining());
+			int nodeLength = readNonNegativeInt(buffer, "node length");
+			if (nodeLength > buffer.remaining()) throw new IllegalArgumentException("Invalid node length: " + nodeLength);
+
+			int nodeEnd = buffer.position() + nodeLength;
+			int originalLimit = buffer.limit();
+			buffer.limit(nodeEnd);
+			try {
+				readChars(buffer, identifierBuilder, "node identifier length", StateSerializer.MAX_WIRE_NAME_LENGTH);
+				Object value = readIdentifiedValue(registry, buffer, keyDepth);
+				if (buffer.position() != nodeEnd) {
+					throw new IllegalArgumentException("Node was not fully consumed: remaining=" + buffer.remaining());
+				}
+				return value;
+			} finally {
+				buffer.limit(originalLimit);
 			}
-			return value;
 		} finally {
-			buffer.limit(originalLimit);
+			valueDepth--;
 		}
 	}
 
 	private Object readIdentifiedValue(StateRegistry registry, ByteBuffer buffer, int keyDepth) {
 		if (identifierEquals(StateSerializer.CORAL_PROTO_WIRE_NAME)) return readCodecObject(registry, buffer);
 		if (identifierEquals(StateSerializer.STRING_WIRE_NAME)) return readString(buffer);
+		if (identifierEquals(StateSerializer.CHAR_SEQUENCE_WIRE_NAME)) {
+			requireTopLevelTransferValue();
+			return readCharSequence(buffer);
+		}
+		if (identifierEquals(StateSerializer.BYTE_BUFFER_WIRE_NAME)) {
+			requireTopLevelTransferValue();
+			return readByteBuffer(buffer);
+		}
 		if (identifierEquals(StateSerializer.BOOLEAN_WIRE_NAME)) return readBooleanValue(buffer);
 		if (identifierEquals(StateSerializer.BYTE_WIRE_NAME)) return readByteValue(buffer);
 		if (identifierEquals(StateSerializer.CHAR_WIRE_NAME)) return readCharValue(buffer);
@@ -161,6 +176,34 @@ final class StateDeserializer {
 		stringBuilder.ensureCapacity(length);
 		for (int i = 0; i < length; i++) stringBuilder.append(buffer.getChar());
 		return stringBuilder.toString();
+	}
+
+	private Object readCharSequence(ByteBuffer buffer) {
+		int length = readNonNegativeInt(buffer, "CharSequence length");
+		if (length > buffer.remaining() / Character.BYTES) {
+			throw new IllegalArgumentException("Invalid CharSequence length: " + length);
+		}
+		return recordTransfer(targetState.transferValues().acquireCharSequence(buffer, length));
+	}
+
+	private Object readByteBuffer(ByteBuffer buffer) {
+		int length = readNonNegativeInt(buffer, "ByteBuffer length");
+		if (length > buffer.remaining()) {
+			throw new IllegalArgumentException("Invalid ByteBuffer length: " + length);
+		}
+		return recordTransfer(targetState.transferValues().acquireByteBuffer(buffer, length));
+	}
+
+	private void requireTopLevelTransferValue() {
+		if (valueDepth != 1) {
+			throw new IllegalArgumentException("CharSequence and ByteBuffer transfer values are only "
+					+ "supported at the top level of State");
+		}
+	}
+
+	private Object recordTransfer(Object value) {
+		rollbackJournal.record(targetState.transferValues().poolFor(value), value);
+		return value;
 	}
 
 	private Object readBooleanValue(ByteBuffer buffer) {

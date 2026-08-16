@@ -68,11 +68,13 @@ public class StateStringTest {
 	}
 
 	@Test
-	public void rejectsUnregisteredStringBuilders() {
+	public void rejectsUnregisteredStringBuildersInsideContainers() {
+		ArrayList<CharSequence> values = new ArrayList<>();
+		values.add(new StringBuilder("CoralState"));
 		State state = new State(new StateRegistry());
 
 		IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
-				() -> state.put("text", new StringBuilder("CoralState")));
+				() -> state.put("text", values));
 
 		assertTrue(error.getMessage().contains(StringBuilder.class.getName()));
 		assertTrue(state.isEmpty());

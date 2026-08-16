@@ -9,6 +9,7 @@ public class State {
 
 	private final CharSequenceMap<Object> values = new CharSequenceMap<>();
 	private final PrimitiveValuePools primitiveValues = new PrimitiveValuePools();
+	private final TransferValuePools transferValues = new TransferValuePools();
 	private final StateRegistry registry;
 	private final StateSerializer serializer = new StateSerializer();
 	private final StateDeserializer deserializer = new StateDeserializer();
@@ -25,52 +26,80 @@ public class State {
 	/**
 	 * Stores an object supported by CoralState's built-in wire format or by this State's registry.
 	 * CoralDS object containers are recursively validated in their current state. Because those
-	 * containers remain mutable, they are validated again when the State is serialized.
+	 * containers remain mutable, they are validated again when the State is serialized. A non-String
+	 * {@link CharSequence} or a {@link ByteBuffer} is copied into internal pooled storage and is only
+	 * supported as a top-level State value. Copying a ByteBuffer does not change its position and uses
+	 * only its remaining bytes.
 	 */
 	public void put(CharSequence key, Object value) {
 		checkKey(key);
+		if (value == null) throw new IllegalArgumentException("State value cannot be null");
+		if (!(value instanceof String) && value instanceof CharSequence) {
+			putCharSequence(key, (CharSequence) value);
+			return;
+		}
+		if (value instanceof ByteBuffer) {
+			putByteBuffer(key, (ByteBuffer) value);
+			return;
+		}
 		serializer.validateForPut(value, registry);
-		primitiveValues.release(values.put(key, value));
+		releaseInternal(values.put(key, value));
 	}
 
 	public void put(CharSequence key, boolean value) {
 		checkKey(key);
+		Object previous = values.get(key);
 		primitiveValues.putBoolean(values, key, value);
+		transferValues.release(previous);
 	}
 
 	public void put(CharSequence key, byte value) {
 		checkKey(key);
+		Object previous = values.get(key);
 		primitiveValues.putByte(values, key, value);
+		transferValues.release(previous);
 	}
 
 	public void put(CharSequence key, char value) {
 		checkKey(key);
+		Object previous = values.get(key);
 		primitiveValues.putChar(values, key, value);
+		transferValues.release(previous);
 	}
 
 	public void put(CharSequence key, short value) {
 		checkKey(key);
+		Object previous = values.get(key);
 		primitiveValues.putShort(values, key, value);
+		transferValues.release(previous);
 	}
 
 	public void put(CharSequence key, int value) {
 		checkKey(key);
+		Object previous = values.get(key);
 		primitiveValues.putInt(values, key, value);
+		transferValues.release(previous);
 	}
 
 	public void put(CharSequence key, long value) {
 		checkKey(key);
+		Object previous = values.get(key);
 		primitiveValues.putLong(values, key, value);
+		transferValues.release(previous);
 	}
 
 	public void put(CharSequence key, float value) {
 		checkKey(key);
+		Object previous = values.get(key);
 		primitiveValues.putFloat(values, key, value);
+		transferValues.release(previous);
 	}
 
 	public void put(CharSequence key, double value) {
 		checkKey(key);
+		Object previous = values.get(key);
 		primitiveValues.putDouble(values, key, value);
+		transferValues.release(previous);
 	}
 	
 	public Object get(CharSequence key) {
@@ -78,6 +107,9 @@ public class State {
 		Object value = values.get(key);
 		if (PrimitiveValuePools.typeOf(value) != PrimitiveValuePools.NOT_PRIMITIVE) {
 			throw new IllegalArgumentException("Primitive State values require a typed getter: " + key);
+		}
+		if (TransferValuePools.typeOf(value) != TransferValuePools.NOT_TRANSFER_VALUE) {
+			throw new IllegalArgumentException("Scalar-transfer State values require a typed getter: " + key);
 		}
 		return value;
 	}
@@ -122,11 +154,35 @@ public class State {
 		return primitiveValues.getDouble(values, key);
 	}
 
+	/**
+	 * Returns a borrowed String or read-only pooled CharSequence value. A pooled value remains valid
+	 * only until its State entry is replaced or removed and must not be retained beyond that point.
+	 */
+	public CharSequence getCharSequence(CharSequence key) {
+		checkKey(key);
+		Object value = values.get(key);
+		if (value instanceof String) return (String) value;
+		return transferValues.getCharSequence(values, key);
+	}
+
+	/**
+	 * Returns a borrowed read-only ByteBuffer positioned at zero and limited to the stored byte
+	 * length. Repeated calls for the same entry return and reset the same view. The view remains valid
+	 * only until its State entry is replaced or removed and must not be retained beyond that point.
+	 */
+	public ByteBuffer getByteBuffer(CharSequence key) {
+		checkKey(key);
+		return transferValues.getByteBuffer(values, key);
+	}
+
 	public Object remove(CharSequence key) {
 		checkKey(key);
 		Object value = values.get(key);
 		if (PrimitiveValuePools.typeOf(value) != PrimitiveValuePools.NOT_PRIMITIVE) {
 			throw new IllegalArgumentException("Primitive State values require a typed remover: " + key);
+		}
+		if (TransferValuePools.typeOf(value) != TransferValuePools.NOT_TRANSFER_VALUE) {
+			throw new IllegalArgumentException("Scalar-transfer State values require a typed remover: " + key);
 		}
 		return values.remove(key);
 	}
@@ -169,6 +225,26 @@ public class State {
 	public double removeDouble(CharSequence key) {
 		checkKey(key);
 		return primitiveValues.removeDouble(values, key);
+	}
+
+	/**
+	 * Removes and returns a String or borrowed pooled CharSequence value. A returned pooled value
+	 * must be consumed before another mutation of this State can reuse its holder.
+	 */
+	public CharSequence removeCharSequence(CharSequence key) {
+		checkKey(key);
+		Object value = values.get(key);
+		if (value instanceof String) return (String) values.remove(key);
+		return transferValues.removeCharSequence(values, key);
+	}
+
+	/**
+	 * Removes and returns a borrowed read-only ByteBuffer view. The returned view must be consumed
+	 * before another mutation of this State can reuse its holder.
+	 */
+	public ByteBuffer removeByteBuffer(CharSequence key) {
+		checkKey(key);
+		return transferValues.removeByteBuffer(values, key);
 	}
 	
 	public boolean check(CharSequence key) {
@@ -274,11 +350,32 @@ public class State {
 		if (key == null) throw new IllegalArgumentException("State key cannot be null");
 	}
 
+	private void putCharSequence(CharSequence key, CharSequence value) {
+		Object previous = values.get(key);
+		transferValues.putCharSequence(values, key, value);
+		releaseInternal(previous);
+	}
+
+	private void putByteBuffer(CharSequence key, ByteBuffer value) {
+		Object previous = values.get(key);
+		transferValues.putByteBuffer(values, key, value);
+		releaseInternal(previous);
+	}
+
+	private void releaseInternal(Object value) {
+		primitiveValues.release(value);
+		transferValues.release(value);
+	}
+
 	CharSequenceMap<Object> internalValues() {
 		return values;
 	}
 
 	PrimitiveValuePools primitiveValues() {
 		return primitiveValues;
+	}
+
+	TransferValuePools transferValues() {
+		return transferValues;
 	}
 }
