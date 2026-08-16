@@ -11,6 +11,8 @@ import java.nio.ByteBuffer;
 
 import org.junit.Test;
 
+import com.coralblocks.coralds.list.IntArrayList;
+
 public class StatePrimitiveTest {
 
 	@Test
@@ -68,8 +70,9 @@ public class StatePrimitiveTest {
 		state.put("reused", 3L);
 		assertSame(secondHolder, state.internalValues().get("reused"));
 
-		state.put("reused", "object");
-		assertEquals("object", state.get("reused"));
+		IntArrayList object = new IntArrayList();
+		state.put("reused", object);
+		assertSame(object, state.get("reused"));
 		state.put("another", 4L);
 		assertSame(secondHolder, state.internalValues().get("another"));
 	}

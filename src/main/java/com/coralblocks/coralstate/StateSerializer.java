@@ -81,6 +81,15 @@ final class StateSerializer {
 
 	private final IdentitySet<Object> activeContainers = new IdentitySet<>();
 
+	void validateForPut(Object value, StateRegistry registry) {
+		activeContainers.clear();
+		try {
+			validateValue(value, registry);
+		} finally {
+			activeContainers.clear();
+		}
+	}
+
 	int getSerializedLength(State state) {
 		if (state == null) throw new IllegalArgumentException("State cannot be null");
 
@@ -130,7 +139,7 @@ final class StateSerializer {
 	}
 
 	private void writeValue(Object value, StateRegistry registry, ByteBuffer buffer) {
-		if (value == null) throw new IllegalArgumentException("State values cannot be null");
+		if (value == null) throw new IllegalStateException("State values cannot be null");
 
 		int primitiveType = PrimitiveValuePools.typeOf(value);
 		if (primitiveType != PrimitiveValuePools.NOT_PRIMITIVE) {
@@ -164,7 +173,7 @@ final class StateSerializer {
 	}
 
 	private int getValueLength(Object value, StateRegistry registry) {
-		if (value == null) throw new IllegalArgumentException("State values cannot be null");
+		if (value == null) throw new IllegalStateException("State values cannot be null");
 
 		int primitiveType = PrimitiveValuePools.typeOf(value);
 		if (primitiveType != PrimitiveValuePools.NOT_PRIMITIVE) {
@@ -194,6 +203,71 @@ final class StateSerializer {
 		if (type == LongSet.class) return getLongSetLength((LongSet) value);
 		if (type == Set.class) return getSetLength((Set<?>) value, registry);
 		return getCodecObjectLength(value, registry);
+	}
+
+	private void validateValue(Object value, StateRegistry registry) {
+		if (value == null) throw new IllegalArgumentException("State values cannot be null");
+		if (PrimitiveValuePools.typeOf(value) != PrimitiveValuePools.NOT_PRIMITIVE) return;
+
+		Class<?> type = value.getClass();
+		if (isPrimitiveContainer(type)) return;
+		if (isObjectMap(type)) {
+			validateObjectMap(value, registry);
+			return;
+		}
+		if (isObjectIterable(type)) {
+			validateObjectIterable(value, (Iterable<?>) value, registry);
+			return;
+		}
+		if (registry.findByJavaType(type) == null) {
+			throw new IllegalArgumentException("Unsupported State value type: " + type.getName());
+		}
+	}
+
+	private void validateObjectMap(Object mapObject, StateRegistry registry) {
+		enterContainerForValidation(mapObject);
+		try {
+			Iterator<?> iter = mapObject instanceof IdentityMap<?, ?> identityMap ? identityMap.iterator()
+					: mapObject instanceof LinkedMap<?, ?> linkedMap ? linkedMap.iterator()
+					: ((Map<?, ?>) mapObject).iterator();
+			while(iter.hasNext()) {
+				Object value = iter.next();
+				Object key = mapObject instanceof IdentityMap<?, ?> identityMap ? identityMap.getCurrIteratorKey()
+						: mapObject instanceof LinkedMap<?, ?> linkedMap ? linkedMap.getCurrIteratorKey()
+						: ((Map<?, ?>) mapObject).getCurrIteratorKey();
+				validateValue(key, registry);
+				validateValue(value, registry);
+			}
+		} finally {
+			exitContainer(mapObject);
+		}
+	}
+
+	private void validateObjectIterable(Object container, Iterable<?> values, StateRegistry registry) {
+		enterContainerForValidation(container);
+		try {
+			Iterator<?> iter = values.iterator();
+			while(iter.hasNext()) validateValue(iter.next(), registry);
+		} finally {
+			exitContainer(container);
+		}
+	}
+
+	private static boolean isPrimitiveContainer(Class<?> type) {
+		return type == IntArrayList.class || type == IntLinkedList.class
+				|| type == LongArrayList.class || type == LongLinkedList.class
+				|| type == IntSet.class || type == LongSet.class;
+	}
+
+	private static boolean isObjectMap(Class<?> type) {
+		return type == IdentityMap.class || type == LinkedMap.class || type == Map.class;
+	}
+
+	private static boolean isObjectIterable(Class<?> type) {
+		return type == ArrayLinkedList.class || type == ArrayList.class || type == LinkedList.class
+				|| type == ByteBufferMap.class || type == ByteMap.class || type == CharMap.class
+				|| type == CharSequenceMap.class || type == IntMap.class || type == LongMap.class
+				|| type == IdentitySet.class || type == LinkedSet.class || type == Set.class;
 	}
 
 	private void writePrimitive(Object value, int primitiveType, ByteBuffer buffer) {
@@ -724,7 +798,7 @@ final class StateSerializer {
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	private int getCodecObjectLength(Object value, StateRegistry registry) {
 		StateCodec codec = registry.findByJavaType(value.getClass());
-		if (codec == null) throw new IllegalArgumentException("Unsupported State value type: " + value.getClass().getName());
+		if (codec == null) throw new IllegalStateException("Unsupported State value type: " + value.getClass().getName());
 		Proto proto = codec.getProto();
 		codec.encode(value, proto);
 		int protoLength = proto.getLength();
@@ -735,7 +809,7 @@ final class StateSerializer {
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	private void writeCodecObject(Object value, StateRegistry registry, ByteBuffer buffer) {
 		StateCodec codec = registry.findByJavaType(value.getClass());
-		if (codec == null) throw new IllegalArgumentException("Unsupported State value type: " + value.getClass().getName());
+		if (codec == null) throw new IllegalStateException("Unsupported State value type: " + value.getClass().getName());
 		Proto proto = codec.getProto();
 		codec.encode(value, proto);
 		int node = beginNode(CORAL_PROTO_WIRE_NAME, buffer);
@@ -751,8 +825,15 @@ final class StateSerializer {
 
 	private void enterContainer(Object container, String operation) {
 		if (!activeContainers.add(container)) {
-			throw new IllegalArgumentException("Cyclic " + container.getClass().getSimpleName()
+			throw new IllegalStateException("Cyclic " + container.getClass().getSimpleName()
 					+ " detected while " + operation + " State");
+		}
+	}
+
+	private void enterContainerForValidation(Object container) {
+		if (!activeContainers.add(container)) {
+			throw new IllegalArgumentException("Cyclic " + container.getClass().getSimpleName()
+					+ " detected while validating State");
 		}
 	}
 

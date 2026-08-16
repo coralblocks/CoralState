@@ -217,12 +217,16 @@ public class CoralDSStateSerializationTest {
 	@Test
 	public void rejectsCyclesInMapsAndSets() {
 		Map<Person, Object> cyclicMap = new Map<>();
+		State mapState = new State(registry);
+		mapState.put("cycle", cyclicMap);
 		cyclicMap.put(person("cycle key", 36), cyclicMap);
-		assertCycleRejected("Map", cyclicMap);
+		assertCycleRejected("Map", mapState);
 
 		Set<Object> cyclicSet = new Set<>();
+		State setState = new State(registry);
+		setState.put("cycle", cyclicSet);
 		cyclicSet.add(cyclicSet);
-		assertCycleRejected("Set", cyclicSet);
+		assertCycleRejected("Set", setState);
 	}
 
 	private State roundTrip(State source) {
@@ -238,14 +242,11 @@ public class CoralDSStateSerializationTest {
 		return restored;
 	}
 
-	private void assertCycleRejected(String type, Object value) {
-		State state = new State(registry);
-		state.put("cycle", value);
-
+	private void assertCycleRejected(String type, State state) {
 		try {
 			state.getSerializedLength();
 			fail("Expected cyclic " + type + " to be rejected while measuring");
-		} catch (IllegalArgumentException e) {
+		} catch (IllegalStateException e) {
 			assertTrue(e.getMessage().contains("Cyclic " + type));
 		}
 
@@ -254,7 +255,7 @@ public class CoralDSStateSerializationTest {
 		try {
 			state.writeTo(buffer);
 			fail("Expected cyclic " + type + " to be rejected while serializing");
-		} catch (IllegalArgumentException e) {
+		} catch (IllegalStateException e) {
 			assertTrue(e.getMessage().contains("Cyclic " + type));
 		}
 		assertEquals(7, buffer.position());

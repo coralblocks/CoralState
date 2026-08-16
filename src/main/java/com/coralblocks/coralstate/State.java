@@ -21,10 +21,15 @@ public class State {
 	public StateRegistry getRegistry() {
 		return registry;
 	}
-	
+
+	/**
+	 * Stores an object supported by this State's registry or by CoralState's CoralDS wire format.
+	 * CoralDS object containers are recursively validated in their current state. Because those
+	 * containers remain mutable, they are validated again when the State is serialized.
+	 */
 	public void put(CharSequence key, Object value) {
-		if (key == null) throw new IllegalArgumentException("State key cannot be null");
-		if (value == null) throw new IllegalArgumentException("State value cannot be null");
+		checkKey(key);
+		serializer.validateForPut(value, registry);
 		primitiveValues.release(values.put(key, value));
 	}
 
@@ -183,7 +188,7 @@ public class State {
 	 * Returns the exact number of bytes required to serialize this State.
 	 *
 	 * @return the serialized length of this State
-	 * @throws IllegalArgumentException if this State contains an unsupported value or cyclic container
+	 * @throws IllegalStateException if this State contains an unsupported value or cyclic container
 	 */
 	public int getSerializedLength() {
 		return serializer.getSerializedLength(this);
@@ -194,7 +199,8 @@ public class State {
 	 *
 	 * @param buffer the destination buffer
 	 * @return the number of bytes written
-	 * @throws IllegalArgumentException if the buffer is null or this State contains an unsupported value
+	 * @throws IllegalArgumentException if the buffer is null
+	 * @throws IllegalStateException if this State contains an unsupported value or cyclic container
 	 */
 	public int writeTo(ByteBuffer buffer) {
 		return serializer.write(this, buffer);

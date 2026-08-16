@@ -103,16 +103,16 @@ public class StateSerializerTest {
 	@Test
 	public void rejectsCyclicArrayListAndRestoresBufferPosition() {
 		ArrayList<Object> cyclic = new ArrayList<>();
-		cyclic.add(cyclic);
 		State state = new State(registry);
 		state.put("cyclic", cyclic);
+		cyclic.add(cyclic);
 		ByteBuffer buffer = ByteBuffer.allocate(256);
 		buffer.position(7);
 
 		try {
 			state.writeTo(buffer);
 			fail("Expected cyclic ArrayList to be rejected");
-		} catch (IllegalArgumentException e) {
+		} catch (IllegalStateException e) {
 			assertTrue(e.getMessage().contains("Cyclic ArrayList"));
 		}
 
@@ -120,16 +120,16 @@ public class StateSerializerTest {
 	}
 
 	@Test
-	public void rejectsUnsupportedValuesClearly() {
+	public void rejectsUnsupportedValuesWhenTheyArePut() {
 		State state = new State(registry);
-		state.put("unsupported", new Object());
 
 		try {
-			state.writeTo(ByteBuffer.allocate(128));
+			state.put("unsupported", new Object());
 			fail("Expected unsupported type to be rejected");
 		} catch (IllegalArgumentException e) {
 			assertTrue(e.getMessage().contains(Object.class.getName()));
 		}
+		assertTrue(state.isEmpty());
 	}
 
 	@Test

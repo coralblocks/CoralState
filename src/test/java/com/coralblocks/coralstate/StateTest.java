@@ -8,12 +8,14 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
+import com.coralblocks.coralds.list.ArrayList;
+
 public class StateTest {
 
 	@Test
 	public void usesCharSequenceKeys() {
 		State state = new State(new StateRegistry());
-		Object value = new Object();
+		ArrayList<Object> value = new ArrayList<>();
 
 		state.put(new StringBuilder("answer"), value);
 
@@ -26,7 +28,7 @@ public class StateTest {
 	@Test
 	public void removesEntriesByCharSequenceKey() {
 		State state = new State(new StateRegistry());
-		Object value = new Object();
+		ArrayList<Object> value = new ArrayList<>();
 		state.put("answer", value);
 
 		assertSame(value, state.remove(new StringBuilder("answer")));
@@ -59,16 +61,16 @@ public class StateTest {
 	@Test
 	public void comparesAndPrintsEntriesByValue() {
 		State first = new State(new StateRegistry());
-		first.put("name", "Coral");
-		first.put("version", Integer.valueOf(1));
+		first.put("active", true);
+		first.put("version", 1);
 
 		State second = new State(new StateRegistry());
-		second.put(new StringBuilder("version"), Integer.valueOf(1));
-		second.put(new StringBuilder("name"), new String("Coral"));
+		second.put(new StringBuilder("version"), 1);
+		second.put(new StringBuilder("active"), true);
 
 		assertEquals(first, second);
 		assertEquals(first.hashCode(), second.hashCode());
-		assertTrue(first.toString().contains("name=Coral"));
+		assertTrue(first.toString().contains("active=true"));
 		assertTrue(first.toString().contains("version=1"));
 	}
 }
