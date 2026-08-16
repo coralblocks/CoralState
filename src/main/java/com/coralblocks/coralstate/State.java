@@ -31,6 +31,11 @@ public class State {
 		if (key == null) throw new IllegalArgumentException("State key cannot be null");
 		return values.get(key);
 	}
+
+	public Object remove(CharSequence key) {
+		if (key == null) throw new IllegalArgumentException("State key cannot be null");
+		return values.remove(key);
+	}
 	
 	public boolean check(CharSequence key) {
 		if (key == null) throw new IllegalArgumentException("State key cannot be null");
