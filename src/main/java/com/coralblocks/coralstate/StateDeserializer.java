@@ -417,7 +417,11 @@ final class StateDeserializer {
 			throw new IllegalArgumentException("No codec is registered for Proto type='" + type
 					+ "', subtype='" + subtype + "', version=" + version);
 		}
-		return decode(codec, registry, buffer);
+		Object object = decode(codec, registry, buffer);
+		// Older CoralProto schemas leave appended fields unread. The State node length provides the
+		// boundary needed to ignore those unknown fields without consuming bytes from the next node.
+		buffer.position(buffer.limit());
+		return object;
 	}
 
 	@SuppressWarnings({ "rawtypes", "unchecked" })
