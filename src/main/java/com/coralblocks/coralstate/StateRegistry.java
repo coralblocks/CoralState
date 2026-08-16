@@ -2,15 +2,30 @@ package com.coralblocks.coralstate;
 
 import com.coralblocks.coralds.map.IntMap;
 import com.coralblocks.coralds.map.Map;
+import com.coralblocks.coralpool.ArrayObjectPool;
 import com.coralblocks.coralpool.ObjectPool;
 import com.coralblocks.coralproto.Proto;
 
 public final class StateRegistry {
 
+	private static final int DEFAULT_POOL_SIZE = 64;
+
 	private final Map<Class<?>, StateCodec<?,?>> byJavaType = new Map<>();
 	private final IntMap<StateCodec<?,?>> byProtoType = new IntMap<>();
 	private final Map<Class<?>, ObjectPool<?>> poolsByJavaType = new Map<>();
 
+	/**
+	 * Registers a codec using a default object pool containing 64 instances. The codec's Java type
+	 * must provide a public empty constructor.
+	 */
+	public <T, P extends Proto> StateRegistry register(StateCodec<T, P> stateCodec) {
+		return register(stateCodec,
+				new ArrayObjectPool<T>(DEFAULT_POOL_SIZE, stateCodec.javaType()));
+	}
+
+	/**
+	 * Registers a codec using an application-provided object pool.
+	 */
 	public <T, P extends Proto> StateRegistry register(StateCodec<T, P> stateCodec, ObjectPool<T> pool) {
 		
 		Proto proto = stateCodec.getProto();

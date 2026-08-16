@@ -7,8 +7,6 @@ import java.nio.ByteBuffer;
 import org.junit.Test;
 
 import com.coralblocks.coralds.list.ArrayList;
-import com.coralblocks.coralpool.ArrayObjectPool;
-import com.coralblocks.coralpool.ObjectPool;
 import com.coralblocks.coralstate.State;
 import com.coralblocks.coralstate.StateRegistry;
 
@@ -16,9 +14,8 @@ public class PersonSerializationTest {
 
 	@Test
 	public void serializesAndDeserializesState() {
-		ObjectPool<Person> personPool = new ArrayObjectPool<>(4, Person.class);
 		StateRegistry registry = new StateRegistry();
-		registry.register(new PersonCodec(), personPool);
+		registry.register(new PersonCodec());
 
 		State original = new State(registry);
 		original.put("person", new Person("Alice", 31));

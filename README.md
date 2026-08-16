@@ -14,7 +14,7 @@ CoralState is a lightweight, garbage-free and fast Java library for collecting o
 
 ## Example
 
-Define the `Person` class. It must provide an empty constructor so its object pool can create instances:
+Define the `Person` class. It must provide a public empty constructor so its object pool can create instances:
 
 ```java
 public final class Person {
@@ -93,11 +93,11 @@ public final class PersonCodec implements StateCodec<Person, PersonCodec.PersonP
 }
 ```
 
-Register the `Person` codec and pool:
+Register the `Person` codec:
 
 ```java
 StateRegistry registry = new StateRegistry();
-registry.register(new PersonCodec(), new ArrayObjectPool<Person>(4, Person.class));
+registry.register(new PersonCodec());
 ```
 
 Create a State containing one `Person` and a CoralDS list of three people:
