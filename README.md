@@ -4,13 +4,14 @@ CoralState is a lightweight, garbage-free and fast Java library for collecting o
 ## Features
 
 - Simple key-based API for adding, getting, checking and removing values.
-- Fast binary serialization of the complete State to and from a `ByteBuffer`.
+- Fast binary serialization of the complete State to and from a `ByteBuffer` without creating any garbage.
 - Support for all Java primitives without boxing.
 - Support for `String` and top-level `CharSequence` and `ByteBuffer` values.
-- Support for nested CoralDS lists, maps and sets.
-- Support for application objects through CoralProto codecs
+- Support for all nested [CoralDS](https://github.com/coralblocks/CoralDS) lists, maps and sets.
+- Support for application objects through [CoralProto](https://github.com/coralblocks/CoralProto) codecs.
 - Validation of unsupported values before they are added or serialized.
-- Designed for garbage-free, single-threaded applications.
+- Support for easy schema evolution through [CoralProto](https://github.com/coralblocks/CoralProto).
+- Designed for single-threaded applications. Non-thread-safe by design.
 
 ## Example
 
@@ -24,7 +25,7 @@ public final class Person {
     private final StringBuilder name = new StringBuilder(MAX_NAME);
     private int age;
 
-    public Person() {
+    public Person() { // must be defined so CoralState can create pooled instances
     }
 
     public Person(CharSequence name, int age) {
@@ -48,10 +49,26 @@ public final class Person {
     public void setAge(int age) {
         this.age = age;
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == this) return true;
+        if (!(o instanceof Person other)) return false;
+        return age == other.age && CharSequence.compare(name, other.name) == 0;
+    }
+
+    @Override
+    public int hashCode() {
+        int hash = 0;
+        for (int i = 0; i < name.length(); i++) {
+            hash = 31 * hash + name.charAt(i);
+        }
+        return 31 * hash + age;
+    }
 }
 ```
 
-Define its CoralProto codec:
+Define its [CoralProto](https://github.com/coralblocks/CoralProto) codec:
 
 ```java
 public final class PersonCodec implements StateCodec<Person, PersonCodec.PersonProto> {
@@ -100,7 +117,7 @@ StateRegistry registry = new StateRegistry();
 registry.register(new PersonCodec());
 ```
 
-Create a State containing one `Person` and a CoralDS list of three people:
+Create a State containing one `Person` and a [CoralDS](https://github.com/coralblocks/CoralDS) list of three people:
 
 ```java
 State original = new State(registry);
@@ -123,10 +140,12 @@ buffer.flip();
 State restored = new State(registry);
 restored.readFrom(buffer);
 
+Assert.assertEquals(original, restored);
+
 Person person = (Person) restored.get("person");
 ArrayList<Person> restoredPeople = (ArrayList<Person>) restored.get("people");
 ```
 
 ## Schema Evolution
 
-CoralState support for schema evolution is naturally inherited from CoralProto. For example, fields can be appended to `PersonProto` while preserving compatibility with older State data.
+CoralState support for schema evolution is naturally inherited from [CoralProto](https://github.com/coralblocks/CoralProto). For example, fields can be appended to `PersonProto` while preserving compatibility with older State data.
