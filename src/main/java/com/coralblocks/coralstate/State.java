@@ -8,6 +8,7 @@ import com.coralblocks.coralds.map.CharSequenceMap;
 public class State {
 
 	private final CharSequenceMap<Object> values = new CharSequenceMap<>();
+	private final PrimitiveValuePools primitiveValues = new PrimitiveValuePools();
 	private final StateRegistry registry;
 	private final StateSerializer serializer = new StateSerializer();
 	private final StateDeserializer deserializer = new StateDeserializer();
@@ -24,21 +25,149 @@ public class State {
 	public void put(CharSequence key, Object value) {
 		if (key == null) throw new IllegalArgumentException("State key cannot be null");
 		if (value == null) throw new IllegalArgumentException("State value cannot be null");
-		values.put(key, value);
+		primitiveValues.release(values.put(key, value));
+	}
+
+	public void put(CharSequence key, boolean value) {
+		checkKey(key);
+		primitiveValues.putBoolean(values, key, value);
+	}
+
+	public void put(CharSequence key, byte value) {
+		checkKey(key);
+		primitiveValues.putByte(values, key, value);
+	}
+
+	public void put(CharSequence key, char value) {
+		checkKey(key);
+		primitiveValues.putChar(values, key, value);
+	}
+
+	public void put(CharSequence key, short value) {
+		checkKey(key);
+		primitiveValues.putShort(values, key, value);
+	}
+
+	public void put(CharSequence key, int value) {
+		checkKey(key);
+		primitiveValues.putInt(values, key, value);
+	}
+
+	public void put(CharSequence key, long value) {
+		checkKey(key);
+		primitiveValues.putLong(values, key, value);
+	}
+
+	public void put(CharSequence key, float value) {
+		checkKey(key);
+		primitiveValues.putFloat(values, key, value);
+	}
+
+	public void put(CharSequence key, double value) {
+		checkKey(key);
+		primitiveValues.putDouble(values, key, value);
 	}
 	
 	public Object get(CharSequence key) {
-		if (key == null) throw new IllegalArgumentException("State key cannot be null");
-		return values.get(key);
+		checkKey(key);
+		Object value = values.get(key);
+		if (PrimitiveValuePools.typeOf(value) != PrimitiveValuePools.NOT_PRIMITIVE) {
+			throw new IllegalArgumentException("Primitive State values require a typed getter: " + key);
+		}
+		return value;
+	}
+
+	public boolean getBoolean(CharSequence key) {
+		checkKey(key);
+		return primitiveValues.getBoolean(values, key);
+	}
+
+	public byte getByte(CharSequence key) {
+		checkKey(key);
+		return primitiveValues.getByte(values, key);
+	}
+
+	public char getChar(CharSequence key) {
+		checkKey(key);
+		return primitiveValues.getChar(values, key);
+	}
+
+	public short getShort(CharSequence key) {
+		checkKey(key);
+		return primitiveValues.getShort(values, key);
+	}
+
+	public int getInt(CharSequence key) {
+		checkKey(key);
+		return primitiveValues.getInt(values, key);
+	}
+
+	public long getLong(CharSequence key) {
+		checkKey(key);
+		return primitiveValues.getLong(values, key);
+	}
+
+	public float getFloat(CharSequence key) {
+		checkKey(key);
+		return primitiveValues.getFloat(values, key);
+	}
+
+	public double getDouble(CharSequence key) {
+		checkKey(key);
+		return primitiveValues.getDouble(values, key);
 	}
 
 	public Object remove(CharSequence key) {
-		if (key == null) throw new IllegalArgumentException("State key cannot be null");
+		checkKey(key);
+		Object value = values.get(key);
+		if (PrimitiveValuePools.typeOf(value) != PrimitiveValuePools.NOT_PRIMITIVE) {
+			throw new IllegalArgumentException("Primitive State values require a typed remover: " + key);
+		}
 		return values.remove(key);
+	}
+
+	public boolean removeBoolean(CharSequence key) {
+		checkKey(key);
+		return primitiveValues.removeBoolean(values, key);
+	}
+
+	public byte removeByte(CharSequence key) {
+		checkKey(key);
+		return primitiveValues.removeByte(values, key);
+	}
+
+	public char removeChar(CharSequence key) {
+		checkKey(key);
+		return primitiveValues.removeChar(values, key);
+	}
+
+	public short removeShort(CharSequence key) {
+		checkKey(key);
+		return primitiveValues.removeShort(values, key);
+	}
+
+	public int removeInt(CharSequence key) {
+		checkKey(key);
+		return primitiveValues.removeInt(values, key);
+	}
+
+	public long removeLong(CharSequence key) {
+		checkKey(key);
+		return primitiveValues.removeLong(values, key);
+	}
+
+	public float removeFloat(CharSequence key) {
+		checkKey(key);
+		return primitiveValues.removeFloat(values, key);
+	}
+
+	public double removeDouble(CharSequence key) {
+		checkKey(key);
+		return primitiveValues.removeDouble(values, key);
 	}
 	
 	public boolean check(CharSequence key) {
-		if (key == null) throw new IllegalArgumentException("State key cannot be null");
+		checkKey(key);
 		return values.containsKey(key);
 	}
 
@@ -137,7 +266,15 @@ public class State {
 		return hash;
 	}
 
+	private static void checkKey(CharSequence key) {
+		if (key == null) throw new IllegalArgumentException("State key cannot be null");
+	}
+
 	CharSequenceMap<Object> internalValues() {
 		return values;
+	}
+
+	PrimitiveValuePools primitiveValues() {
+		return primitiveValues;
 	}
 }

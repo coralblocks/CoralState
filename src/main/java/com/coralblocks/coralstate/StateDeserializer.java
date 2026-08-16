@@ -42,6 +42,7 @@ final class StateDeserializer {
 	private final ArrayList<StringBuilder> keyBuilders = new ArrayList<>(INITIAL_KEY_DEPTH);
 	private final StringBuilder identifierBuilder = new StringBuilder(StateSerializer.MAX_WIRE_NAME_LENGTH);
 	private final RollbackJournal rollbackJournal = new RollbackJournal();
+	private State targetState;
 
 	StateDeserializer() {
 		for (int i = 0; i < INITIAL_KEY_DEPTH; i++) {
@@ -54,6 +55,7 @@ final class StateDeserializer {
 		if (buffer == null) throw new IllegalArgumentException("ByteBuffer cannot be null");
 		if (!state.isEmpty()) throw new IllegalArgumentException("Destination State must be empty");
 		rollbackJournal.begin();
+		targetState = state;
 
 		int startPosition = buffer.position();
 		ByteOrder originalOrder = buffer.order();
@@ -83,6 +85,7 @@ final class StateDeserializer {
 			buffer.position(startPosition);
 			throw e;
 		} finally {
+			targetState = null;
 			clearBuilders();
 			buffer.order(originalOrder);
 		}
@@ -109,6 +112,14 @@ final class StateDeserializer {
 
 	private Object readIdentifiedValue(StateRegistry registry, ByteBuffer buffer, int keyDepth) {
 		if (identifierEquals(StateSerializer.CORAL_PROTO_WIRE_NAME)) return readCodecObject(registry, buffer);
+		if (identifierEquals(StateSerializer.BOOLEAN_WIRE_NAME)) return readBooleanValue(buffer);
+		if (identifierEquals(StateSerializer.BYTE_WIRE_NAME)) return readByteValue(buffer);
+		if (identifierEquals(StateSerializer.CHAR_WIRE_NAME)) return readCharValue(buffer);
+		if (identifierEquals(StateSerializer.SHORT_WIRE_NAME)) return readShortValue(buffer);
+		if (identifierEquals(StateSerializer.INT_WIRE_NAME)) return readIntValue(buffer);
+		if (identifierEquals(StateSerializer.LONG_WIRE_NAME)) return readLongValue(buffer);
+		if (identifierEquals(StateSerializer.FLOAT_WIRE_NAME)) return readFloatValue(buffer);
+		if (identifierEquals(StateSerializer.DOUBLE_WIRE_NAME)) return readDoubleValue(buffer);
 
 		if (identifierEquals(StateSerializer.ARRAY_LINKED_LIST_WIRE_NAME)) return readArrayLinkedList(registry, buffer, keyDepth);
 		if (identifierEquals(StateSerializer.ARRAY_LIST_WIRE_NAME)) return readArrayList(registry, buffer, keyDepth);
@@ -135,6 +146,51 @@ final class StateDeserializer {
 		if (identifierEquals(StateSerializer.SET_WIRE_NAME)) return readSet(registry, buffer, keyDepth);
 
 		throw new IllegalArgumentException("Unsupported node identifier: " + identifierBuilder);
+	}
+
+	private Object readBooleanValue(ByteBuffer buffer) {
+		return recordPrimitive(targetState.primitiveValues().acquireBoolean(
+				readBoolean(buffer, "boolean value")));
+	}
+
+	private Object readByteValue(ByteBuffer buffer) {
+		return recordPrimitive(targetState.primitiveValues().acquireByte(
+				readByte(buffer, "byte value")));
+	}
+
+	private Object readCharValue(ByteBuffer buffer) {
+		return recordPrimitive(targetState.primitiveValues().acquireChar(
+				readChar(buffer, "char value")));
+	}
+
+	private Object readShortValue(ByteBuffer buffer) {
+		return recordPrimitive(targetState.primitiveValues().acquireShort(
+				readShort(buffer, "short value")));
+	}
+
+	private Object readIntValue(ByteBuffer buffer) {
+		return recordPrimitive(targetState.primitiveValues().acquireInt(
+				readInt(buffer, "int value")));
+	}
+
+	private Object readLongValue(ByteBuffer buffer) {
+		return recordPrimitive(targetState.primitiveValues().acquireLong(
+				readLong(buffer, "long value")));
+	}
+
+	private Object readFloatValue(ByteBuffer buffer) {
+		return recordPrimitive(targetState.primitiveValues().acquireFloat(
+				readFloat(buffer, "float value")));
+	}
+
+	private Object readDoubleValue(ByteBuffer buffer) {
+		return recordPrimitive(targetState.primitiveValues().acquireDouble(
+				readDouble(buffer, "double value")));
+	}
+
+	private Object recordPrimitive(Object value) {
+		rollbackJournal.record(targetState.primitiveValues().poolFor(value), value);
+		return value;
 	}
 
 	private ArrayLinkedList<Object> readArrayLinkedList(StateRegistry registry, ByteBuffer buffer, int keyDepth) {
@@ -535,6 +591,11 @@ final class StateDeserializer {
 		return buffer.get();
 	}
 
+	private static char readChar(ByteBuffer buffer, String description) {
+		if (buffer.remaining() < Character.BYTES) throw new IllegalArgumentException("Snapshot is missing " + description);
+		return buffer.getChar();
+	}
+
 	private static short readShort(ByteBuffer buffer, String description) {
 		if (buffer.remaining() < Short.BYTES) throw new IllegalArgumentException("Snapshot is missing " + description);
 		return buffer.getShort();
@@ -553,5 +614,10 @@ final class StateDeserializer {
 	private static float readFloat(ByteBuffer buffer, String description) {
 		if (buffer.remaining() < Float.BYTES) throw new IllegalArgumentException("Snapshot is missing " + description);
 		return buffer.getFloat();
+	}
+
+	private static double readDouble(ByteBuffer buffer, String description) {
+		if (buffer.remaining() < Double.BYTES) throw new IllegalArgumentException("Snapshot is missing " + description);
+		return buffer.getDouble();
 	}
 }

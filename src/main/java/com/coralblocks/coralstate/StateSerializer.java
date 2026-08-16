@@ -44,6 +44,14 @@ final class StateSerializer {
 	static final String MAGIC = "CSTA";
 	static final short FORMAT_VERSION = 1;
 	static final String CORAL_PROTO_WIRE_NAME = "CoralProto";
+	static final String BOOLEAN_WIRE_NAME = "Boolean";
+	static final String BYTE_WIRE_NAME = "Byte";
+	static final String CHAR_WIRE_NAME = "Char";
+	static final String SHORT_WIRE_NAME = "Short";
+	static final String INT_WIRE_NAME = "Int";
+	static final String LONG_WIRE_NAME = "Long";
+	static final String FLOAT_WIRE_NAME = "Float";
+	static final String DOUBLE_WIRE_NAME = "Double";
 
 	static final String ARRAY_LINKED_LIST_WIRE_NAME = "ArrayLinkedList";
 	static final String ARRAY_LIST_WIRE_NAME = "ArrayList";
@@ -124,6 +132,12 @@ final class StateSerializer {
 	private void writeValue(Object value, StateRegistry registry, ByteBuffer buffer) {
 		if (value == null) throw new IllegalArgumentException("State values cannot be null");
 
+		int primitiveType = PrimitiveValuePools.typeOf(value);
+		if (primitiveType != PrimitiveValuePools.NOT_PRIMITIVE) {
+			writePrimitive(value, primitiveType, buffer);
+			return;
+		}
+
 		Class<?> type = value.getClass();
 		if (type == ArrayLinkedList.class) writeArrayLinkedList((ArrayLinkedList<?>) value, registry, buffer);
 		else if (type == ArrayList.class) writeArrayList((ArrayList<?>) value, registry, buffer);
@@ -152,6 +166,11 @@ final class StateSerializer {
 	private int getValueLength(Object value, StateRegistry registry) {
 		if (value == null) throw new IllegalArgumentException("State values cannot be null");
 
+		int primitiveType = PrimitiveValuePools.typeOf(value);
+		if (primitiveType != PrimitiveValuePools.NOT_PRIMITIVE) {
+			return getPrimitiveLength(primitiveType);
+		}
+
 		Class<?> type = value.getClass();
 		if (type == ArrayLinkedList.class) return getArrayLinkedListLength((ArrayLinkedList<?>) value, registry);
 		if (type == ArrayList.class) return getArrayListLength((ArrayList<?>) value, registry);
@@ -175,6 +194,71 @@ final class StateSerializer {
 		if (type == LongSet.class) return getLongSetLength((LongSet) value);
 		if (type == Set.class) return getSetLength((Set<?>) value, registry);
 		return getCodecObjectLength(value, registry);
+	}
+
+	private void writePrimitive(Object value, int primitiveType, ByteBuffer buffer) {
+		int node = beginNode(primitiveWireName(primitiveType), buffer);
+		switch(primitiveType) {
+			case PrimitiveValuePools.BOOLEAN:
+				buffer.put(PrimitiveValuePools.booleanValue(value) ? (byte) 1 : (byte) 0);
+				break;
+			case PrimitiveValuePools.BYTE:
+				buffer.put(PrimitiveValuePools.byteValue(value));
+				break;
+			case PrimitiveValuePools.CHAR:
+				buffer.putChar(PrimitiveValuePools.charValue(value));
+				break;
+			case PrimitiveValuePools.SHORT:
+				buffer.putShort(PrimitiveValuePools.shortValue(value));
+				break;
+			case PrimitiveValuePools.INT:
+				buffer.putInt(PrimitiveValuePools.intValue(value));
+				break;
+			case PrimitiveValuePools.LONG:
+				buffer.putLong(PrimitiveValuePools.longValue(value));
+				break;
+			case PrimitiveValuePools.FLOAT:
+				buffer.putFloat(PrimitiveValuePools.floatValue(value));
+				break;
+			case PrimitiveValuePools.DOUBLE:
+				buffer.putDouble(PrimitiveValuePools.doubleValue(value));
+				break;
+			default:
+				throw new IllegalArgumentException("Unsupported primitive State value type: " + primitiveType);
+		}
+		finishNode(node, buffer);
+	}
+
+	private static int getPrimitiveLength(int primitiveType) {
+		return addLength(nodeBaseLength(primitiveWireName(primitiveType)), primitiveSize(primitiveType));
+	}
+
+	private static String primitiveWireName(int primitiveType) {
+		switch(primitiveType) {
+			case PrimitiveValuePools.BOOLEAN: return BOOLEAN_WIRE_NAME;
+			case PrimitiveValuePools.BYTE: return BYTE_WIRE_NAME;
+			case PrimitiveValuePools.CHAR: return CHAR_WIRE_NAME;
+			case PrimitiveValuePools.SHORT: return SHORT_WIRE_NAME;
+			case PrimitiveValuePools.INT: return INT_WIRE_NAME;
+			case PrimitiveValuePools.LONG: return LONG_WIRE_NAME;
+			case PrimitiveValuePools.FLOAT: return FLOAT_WIRE_NAME;
+			case PrimitiveValuePools.DOUBLE: return DOUBLE_WIRE_NAME;
+			default: throw new IllegalArgumentException("Unsupported primitive State value type: " + primitiveType);
+		}
+	}
+
+	private static int primitiveSize(int primitiveType) {
+		switch(primitiveType) {
+			case PrimitiveValuePools.BOOLEAN: return Byte.BYTES;
+			case PrimitiveValuePools.BYTE: return Byte.BYTES;
+			case PrimitiveValuePools.CHAR: return Character.BYTES;
+			case PrimitiveValuePools.SHORT: return Short.BYTES;
+			case PrimitiveValuePools.INT: return Integer.BYTES;
+			case PrimitiveValuePools.LONG: return Long.BYTES;
+			case PrimitiveValuePools.FLOAT: return Float.BYTES;
+			case PrimitiveValuePools.DOUBLE: return Double.BYTES;
+			default: throw new IllegalArgumentException("Unsupported primitive State value type: " + primitiveType);
+		}
 	}
 
 	private void writeArrayLinkedList(ArrayLinkedList<?> list, StateRegistry registry, ByteBuffer buffer) {
