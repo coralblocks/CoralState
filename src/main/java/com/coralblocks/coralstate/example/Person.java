@@ -36,9 +36,7 @@ public final class Person {
 	@Override
 	public boolean equals(Object o) {
 		if (o == this) return true;
-		if (!(o instanceof Person)) return false;
-
-		Person other = (Person) o;
+		if (!(o instanceof Person other)) return false;
 		return age == other.age && CharSequence.compare(name, other.name) == 0;
 	}
 

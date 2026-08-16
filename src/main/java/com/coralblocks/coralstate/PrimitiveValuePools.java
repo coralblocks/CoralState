@@ -376,7 +376,7 @@ final class PrimitiveValuePools {
 
 		@Override
 		public boolean equals(Object o) {
-			return o instanceof MutableBoolean && value == ((MutableBoolean) o).value;
+			return o instanceof MutableBoolean other && value == other.value;
 		}
 
 		@Override
@@ -395,7 +395,7 @@ final class PrimitiveValuePools {
 
 		@Override
 		public boolean equals(Object o) {
-			return o instanceof MutableByte && value == ((MutableByte) o).value;
+			return o instanceof MutableByte other && value == other.value;
 		}
 
 		@Override
@@ -414,7 +414,7 @@ final class PrimitiveValuePools {
 
 		@Override
 		public boolean equals(Object o) {
-			return o instanceof MutableChar && value == ((MutableChar) o).value;
+			return o instanceof MutableChar other && value == other.value;
 		}
 
 		@Override
@@ -433,7 +433,7 @@ final class PrimitiveValuePools {
 
 		@Override
 		public boolean equals(Object o) {
-			return o instanceof MutableShort && value == ((MutableShort) o).value;
+			return o instanceof MutableShort other && value == other.value;
 		}
 
 		@Override
@@ -452,7 +452,7 @@ final class PrimitiveValuePools {
 
 		@Override
 		public boolean equals(Object o) {
-			return o instanceof MutableInt && value == ((MutableInt) o).value;
+			return o instanceof MutableInt other && value == other.value;
 		}
 
 		@Override
@@ -471,7 +471,7 @@ final class PrimitiveValuePools {
 
 		@Override
 		public boolean equals(Object o) {
-			return o instanceof MutableLong && value == ((MutableLong) o).value;
+			return o instanceof MutableLong other && value == other.value;
 		}
 
 		@Override
@@ -490,7 +490,7 @@ final class PrimitiveValuePools {
 
 		@Override
 		public boolean equals(Object o) {
-			return o instanceof MutableFloat && Float.compare(value, ((MutableFloat) o).value) == 0;
+			return o instanceof MutableFloat other && Float.compare(value, other.value) == 0;
 		}
 
 		@Override
@@ -509,7 +509,7 @@ final class PrimitiveValuePools {
 
 		@Override
 		public boolean equals(Object o) {
-			return o instanceof MutableDouble && Double.compare(value, ((MutableDouble) o).value) == 0;
+			return o instanceof MutableDouble other && Double.compare(value, other.value) == 0;
 		}
 
 		@Override

@@ -214,9 +214,7 @@ public class State {
 	@Override
 	public boolean equals(Object o) {
 		if (o == this) return true;
-		if (!(o instanceof State)) return false;
-
-		State other = (State) o;
+		if (!(o instanceof State other)) return false;
 		if (size() != other.size()) return false;
 
 		Iterator<Object> iter = values.iterator();
