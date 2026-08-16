@@ -14,6 +14,85 @@ CoralState is a lightweight, garbage-free and fast Java library for collecting o
 
 ## Example
 
+Define the `Person` class. It must provide an empty constructor so its object pool can create instances:
+
+```java
+public final class Person {
+
+    public static final int MAX_NAME = 64;
+
+    private final StringBuilder name = new StringBuilder(MAX_NAME);
+    private int age;
+
+    public Person() {
+    }
+
+    public Person(CharSequence name, int age) {
+        setName(name);
+        setAge(age);
+    }
+
+    public CharSequence getName() {
+        return name;
+    }
+
+    public void setName(CharSequence name) {
+        this.name.setLength(0);
+        this.name.append(name);
+    }
+
+    public int getAge() {
+        return age;
+    }
+
+    public void setAge(int age) {
+        this.age = age;
+    }
+}
+```
+
+Define its CoralProto codec:
+
+```java
+public final class PersonCodec implements StateCodec<Person, PersonCodec.PersonProto> {
+
+    private final PersonProto personProto = new PersonProto();
+
+    @Override
+    public Class<Person> javaType() {
+        return Person.class;
+    }
+
+    @Override
+    public PersonProto getProto() {
+        return personProto;
+    }
+
+    @Override
+    public void encode(Person person, PersonProto personProto) {
+        personProto.name.set(person.getName());
+        personProto.age.set(person.getAge());
+    }
+
+    @Override
+    public void decode(PersonProto personProto, Person person) {
+        person.setName(personProto.name.get());
+        person.setAge(personProto.age.get());
+    }
+
+    public static final class PersonProto extends AbstractProto {
+
+        public static final char TYPE = 'P';
+        public static final char SUBTYPE = 'R';
+
+        public final TypeField type = new TypeField(this, TYPE);
+        public final SubtypeField subtype = new SubtypeField(this, SUBTYPE);
+        public final VarCharsField name = new VarCharsField(this, Person.MAX_NAME);
+        public final IntField age = new IntField(this);
+    }
+}
+```
+
 Register the `Person` codec and pool:
 
 ```java
