@@ -36,14 +36,15 @@ import com.coralblocks.coralproto.Proto;
  * mutable Proto instance owned by each registered {@link StateCodec}.</p>
  *
  * <p>Each value node contains its byte length followed by one readable identifier and its
- * type-specific payload. Registered codec objects and every concrete CoralDS collection are
- * supported as explicit wire types.</p>
+ * type-specific payload. Strings, primitives, registered codec objects, and every concrete
+ * CoralDS collection are supported as explicit wire types.</p>
  */
 final class StateSerializer {
 
 	static final String MAGIC = "CSTA";
 	static final short FORMAT_VERSION = 1;
 	static final String CORAL_PROTO_WIRE_NAME = "CoralProto";
+	static final String STRING_WIRE_NAME = "String";
 	static final String BOOLEAN_WIRE_NAME = "Boolean";
 	static final String BYTE_WIRE_NAME = "Byte";
 	static final String CHAR_WIRE_NAME = "Char";
@@ -148,7 +149,8 @@ final class StateSerializer {
 		}
 
 		Class<?> type = value.getClass();
-		if (type == ArrayLinkedList.class) writeArrayLinkedList((ArrayLinkedList<?>) value, registry, buffer);
+		if (type == String.class) writeString((String) value, buffer);
+		else if (type == ArrayLinkedList.class) writeArrayLinkedList((ArrayLinkedList<?>) value, registry, buffer);
 		else if (type == ArrayList.class) writeArrayList((ArrayList<?>) value, registry, buffer);
 		else if (type == IntArrayList.class) writeIntArrayList((IntArrayList) value, buffer);
 		else if (type == IntLinkedList.class) writeIntLinkedList((IntLinkedList) value, buffer);
@@ -181,6 +183,7 @@ final class StateSerializer {
 		}
 
 		Class<?> type = value.getClass();
+		if (type == String.class) return getStringLength((String) value);
 		if (type == ArrayLinkedList.class) return getArrayLinkedListLength((ArrayLinkedList<?>) value, registry);
 		if (type == ArrayList.class) return getArrayListLength((ArrayList<?>) value, registry);
 		if (type == IntArrayList.class) return getIntArrayListLength((IntArrayList) value);
@@ -210,6 +213,7 @@ final class StateSerializer {
 		if (PrimitiveValuePools.typeOf(value) != PrimitiveValuePools.NOT_PRIMITIVE) return;
 
 		Class<?> type = value.getClass();
+		if (type == String.class) return;
 		if (isPrimitiveContainer(type)) return;
 		if (isObjectMap(type)) {
 			validateObjectMap(value, registry);
@@ -268,6 +272,18 @@ final class StateSerializer {
 				|| type == ByteBufferMap.class || type == ByteMap.class || type == CharMap.class
 				|| type == CharSequenceMap.class || type == IntMap.class || type == LongMap.class
 				|| type == IdentitySet.class || type == LinkedSet.class || type == Set.class;
+	}
+
+	private void writeString(String value, ByteBuffer buffer) {
+		int node = beginNode(STRING_WIRE_NAME, buffer);
+		buffer.putInt(value.length());
+		for (int i = 0; i < value.length(); i++) buffer.putChar(value.charAt(i));
+		finishNode(node, buffer);
+	}
+
+	private static int getStringLength(String value) {
+		int length = addLength(nodeBaseLength(STRING_WIRE_NAME), Integer.BYTES);
+		return addLength(length, multiplyLength(value.length(), Character.BYTES));
 	}
 
 	private void writePrimitive(Object value, int primitiveType, ByteBuffer buffer) {

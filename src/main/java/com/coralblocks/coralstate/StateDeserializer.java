@@ -30,17 +30,20 @@ import com.coralblocks.coralproto.Proto;
 /**
  * Deserializes a {@link State} written by {@link StateSerializer}.
  *
- * <p>This deserializer is deliberately single-threaded and is not thread-safe. Registered codec
- * objects and every concrete CoralDS collection are supported as explicit wire types.</p>
+ * <p>This deserializer is deliberately single-threaded and is not thread-safe. Strings,
+ * primitives, registered codec objects, and every concrete CoralDS collection are supported as
+ * explicit wire types.</p>
  */
 final class StateDeserializer {
 
 	private static final int PROTO_HEADER_LENGTH = 4;
 	private static final int INITIAL_KEY_DEPTH = 4;
 	private static final int INITIAL_ROLLBACK_CAPACITY = 16;
+	private static final int INITIAL_STRING_CAPACITY = 256;
 
 	private final ArrayList<StringBuilder> keyBuilders = new ArrayList<>(INITIAL_KEY_DEPTH);
 	private final StringBuilder identifierBuilder = new StringBuilder(StateSerializer.MAX_WIRE_NAME_LENGTH);
+	private final StringBuilder stringBuilder = new StringBuilder(INITIAL_STRING_CAPACITY);
 	private final RollbackJournal rollbackJournal = new RollbackJournal();
 	private State targetState;
 
@@ -112,6 +115,7 @@ final class StateDeserializer {
 
 	private Object readIdentifiedValue(StateRegistry registry, ByteBuffer buffer, int keyDepth) {
 		if (identifierEquals(StateSerializer.CORAL_PROTO_WIRE_NAME)) return readCodecObject(registry, buffer);
+		if (identifierEquals(StateSerializer.STRING_WIRE_NAME)) return readString(buffer);
 		if (identifierEquals(StateSerializer.BOOLEAN_WIRE_NAME)) return readBooleanValue(buffer);
 		if (identifierEquals(StateSerializer.BYTE_WIRE_NAME)) return readByteValue(buffer);
 		if (identifierEquals(StateSerializer.CHAR_WIRE_NAME)) return readCharValue(buffer);
@@ -146,6 +150,17 @@ final class StateDeserializer {
 		if (identifierEquals(StateSerializer.SET_WIRE_NAME)) return readSet(registry, buffer, keyDepth);
 
 		throw new IllegalArgumentException("Unsupported node identifier: " + identifierBuilder);
+	}
+
+	private String readString(ByteBuffer buffer) {
+		int length = readNonNegativeInt(buffer, "String length");
+		if (length > buffer.remaining() / Character.BYTES) {
+			throw new IllegalArgumentException("Invalid String length: " + length);
+		}
+		stringBuilder.setLength(0);
+		stringBuilder.ensureCapacity(length);
+		for (int i = 0; i < length; i++) stringBuilder.append(buffer.getChar());
+		return stringBuilder.toString();
 	}
 
 	private Object readBooleanValue(ByteBuffer buffer) {
@@ -550,6 +565,7 @@ final class StateDeserializer {
 	private void clearBuilders() {
 		for (int i = 0; i < keyBuilders.size(); i++) keyBuilders.get(i).setLength(0);
 		identifierBuilder.setLength(0);
+		stringBuilder.setLength(0);
 	}
 
 	private static void readMagic(ByteBuffer buffer) {

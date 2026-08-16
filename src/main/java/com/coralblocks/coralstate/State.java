@@ -23,7 +23,7 @@ public class State {
 	}
 
 	/**
-	 * Stores an object supported by this State's registry or by CoralState's CoralDS wire format.
+	 * Stores an object supported by CoralState's built-in wire format or by this State's registry.
 	 * CoralDS object containers are recursively validated in their current state. Because those
 	 * containers remain mutable, they are validated again when the State is serialized.
 	 */
