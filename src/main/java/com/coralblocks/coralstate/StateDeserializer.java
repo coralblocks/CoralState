@@ -40,6 +40,14 @@ final class StateDeserializer {
 	private static final int INITIAL_KEY_DEPTH = 4;
 	private static final int INITIAL_ROLLBACK_CAPACITY = 16;
 	private static final int INITIAL_STRING_CAPACITY = 256;
+	// Preserve normal empty-container defaults plus one growth step without letting a tiny node
+	// request arbitrary eager allocation.
+	private static final int MIN_CONTAINER_ALLOCATION_LIMIT = 2 * Math.max(
+			ByteBufferMap.DEFAULT_INITIAL_CAPACITY, CharSequenceMap.DEFAULT_INITIAL_CAPACITY);
+	// Pooled key maps allocate maximum-key storage per preloaded or decoded entry.
+	private static final int KEY_STORAGE_WIRE_AMPLIFICATION = 8;
+	private static final long MIN_KEY_STORAGE_LIMIT = (long) MIN_CONTAINER_ALLOCATION_LIMIT
+			* Math.max(ByteBufferMap.DEFAULT_MAX_KEY_LENGTH, CharSequenceMap.DEFAULT_MAX_KEY_LENGTH);
 	// A container level consumes several Java frames; keep hostile wire nesting well below the
 	// platform stack limit instead of relying on StackOverflowError recovery.
 	static final int MAX_VALUE_DEPTH = 128;
@@ -287,6 +295,8 @@ final class StateDeserializer {
 	private ArrayLinkedList<Object> readArrayLinkedList(StateRegistry registry, ByteBuffer buffer, int keyDepth) {
 		int arraySize = readInt(buffer, "ArrayLinkedList array size");
 		int size = readNonNegativeInt(buffer, "ArrayLinkedList size");
+		validateEntryCount(size, buffer, Integer.BYTES, "ArrayLinkedList");
+		validateCapacity(arraySize, size, buffer, true, "ArrayLinkedList array size");
 		ArrayLinkedList<Object> list = new ArrayLinkedList<>(arraySize);
 		for (int i = 0; i < size; i++) list.addLast(readValue(registry, buffer, keyDepth));
 		return list;
@@ -296,6 +306,8 @@ final class StateDeserializer {
 		int initialCapacity = readInt(buffer, "ArrayList initial capacity");
 		float growthFactor = readFloat(buffer, "ArrayList growth factor");
 		int size = readNonNegativeInt(buffer, "ArrayList size");
+		validateEntryCount(size, buffer, Integer.BYTES, "ArrayList");
+		validateListConfiguration(initialCapacity, growthFactor, size, buffer, "ArrayList");
 		ArrayList<Object> list = new ArrayList<>(initialCapacity, growthFactor);
 		for (int i = 0; i < size; i++) list.add(readValue(registry, buffer, keyDepth));
 		return list;
@@ -305,6 +317,8 @@ final class StateDeserializer {
 		int initialCapacity = readInt(buffer, "IntArrayList initial capacity");
 		float growthFactor = readFloat(buffer, "IntArrayList growth factor");
 		int size = readNonNegativeInt(buffer, "IntArrayList size");
+		validateEntryCount(size, buffer, Integer.BYTES, "IntArrayList");
+		validateListConfiguration(initialCapacity, growthFactor, size, buffer, "IntArrayList");
 		IntArrayList list = new IntArrayList(initialCapacity, growthFactor);
 		for (int i = 0; i < size; i++) list.add(readInt(buffer, "IntArrayList element"));
 		return list;
@@ -313,6 +327,8 @@ final class StateDeserializer {
 	private IntLinkedList readIntLinkedList(ByteBuffer buffer) {
 		int initialCapacity = readInt(buffer, "IntLinkedList initial capacity");
 		int size = readNonNegativeInt(buffer, "IntLinkedList size");
+		validateEntryCount(size, buffer, Integer.BYTES, "IntLinkedList");
+		validateCapacity(initialCapacity, size, buffer, true, "IntLinkedList initial capacity");
 		IntLinkedList list = new IntLinkedList(initialCapacity);
 		for (int i = 0; i < size; i++) list.add(readInt(buffer, "IntLinkedList element"));
 		return list;
@@ -321,6 +337,8 @@ final class StateDeserializer {
 	private LinkedList<Object> readLinkedList(StateRegistry registry, ByteBuffer buffer, int keyDepth) {
 		int initialCapacity = readInt(buffer, "LinkedList initial capacity");
 		int size = readNonNegativeInt(buffer, "LinkedList size");
+		validateEntryCount(size, buffer, Integer.BYTES, "LinkedList");
+		validateCapacity(initialCapacity, size, buffer, true, "LinkedList initial capacity");
 		LinkedList<Object> list = new LinkedList<>(initialCapacity);
 		for (int i = 0; i < size; i++) list.add(readValue(registry, buffer, keyDepth));
 		return list;
@@ -330,6 +348,8 @@ final class StateDeserializer {
 		int initialCapacity = readInt(buffer, "LongArrayList initial capacity");
 		float growthFactor = readFloat(buffer, "LongArrayList growth factor");
 		int size = readNonNegativeInt(buffer, "LongArrayList size");
+		validateEntryCount(size, buffer, Long.BYTES, "LongArrayList");
+		validateListConfiguration(initialCapacity, growthFactor, size, buffer, "LongArrayList");
 		LongArrayList list = new LongArrayList(initialCapacity, growthFactor);
 		for (int i = 0; i < size; i++) list.add(readLong(buffer, "LongArrayList element"));
 		return list;
@@ -338,6 +358,8 @@ final class StateDeserializer {
 	private LongLinkedList readLongLinkedList(ByteBuffer buffer) {
 		int initialCapacity = readInt(buffer, "LongLinkedList initial capacity");
 		int size = readNonNegativeInt(buffer, "LongLinkedList size");
+		validateEntryCount(size, buffer, Long.BYTES, "LongLinkedList");
+		validateCapacity(initialCapacity, size, buffer, true, "LongLinkedList initial capacity");
 		LongLinkedList list = new LongLinkedList(initialCapacity);
 		for (int i = 0; i < size; i++) list.add(readLong(buffer, "LongLinkedList element"));
 		return list;
@@ -349,6 +371,10 @@ final class StateDeserializer {
 		float loadFactor = readFloat(buffer, "ByteBufferMap load factor");
 		boolean direct = readBoolean(buffer, "ByteBufferMap direct-buffer flag");
 		int size = readNonNegativeInt(buffer, "ByteBufferMap size");
+		validateEntryCount(size, buffer, Integer.BYTES * 2, "ByteBufferMap");
+		int preloadCount = validateMapConfiguration(
+				initialCapacity, loadFactor, size, buffer, "ByteBufferMap");
+		validateKeyStorage(Math.max(preloadCount, size), maxKeyLength, buffer, "ByteBufferMap");
 		ByteBufferMap<Object> map = new ByteBufferMap<>(initialCapacity, maxKeyLength, loadFactor, direct);
 		for (int i = 0; i < size; i++) {
 			int keyLength = readNonNegativeInt(buffer, "ByteBufferMap key length");
@@ -382,6 +408,8 @@ final class StateDeserializer {
 
 	private ByteMap<Object> readByteMap(StateRegistry registry, ByteBuffer buffer, int keyDepth) {
 		int size = readNonNegativeInt(buffer, "ByteMap size");
+		validateEntryCount(size, buffer, Byte.BYTES + Integer.BYTES, "ByteMap");
+		if (size > 256) throw new IllegalArgumentException("Invalid ByteMap size: " + size);
 		ByteMap<Object> map = new ByteMap<>();
 		for (int i = 0; i < size; i++) {
 			byte key = readByte(buffer, "ByteMap key");
@@ -394,6 +422,8 @@ final class StateDeserializer {
 
 	private CharMap<Object> readCharMap(StateRegistry registry, ByteBuffer buffer, int keyDepth) {
 		int size = readNonNegativeInt(buffer, "CharMap size");
+		validateEntryCount(size, buffer, Byte.BYTES + Integer.BYTES, "CharMap");
+		if (size > 128) throw new IllegalArgumentException("Invalid CharMap size: " + size);
 		CharMap<Object> map = new CharMap<>();
 		for (int i = 0; i < size; i++) {
 			char key = (char) (readByte(buffer, "CharMap key") & 0xff);
@@ -409,6 +439,10 @@ final class StateDeserializer {
 		short maxKeyLength = readShort(buffer, "CharSequenceMap maximum key length");
 		float loadFactor = readFloat(buffer, "CharSequenceMap load factor");
 		int size = readNonNegativeInt(buffer, "CharSequenceMap size");
+		validateEntryCount(size, buffer, Integer.BYTES * 2, "CharSequenceMap");
+		int preloadCount = validateMapConfiguration(
+				initialCapacity, loadFactor, size, buffer, "CharSequenceMap");
+		validateKeyStorage(Math.max(preloadCount, size), maxKeyLength, buffer, "CharSequenceMap");
 		CharSequenceMap<Object> map = new CharSequenceMap<>(initialCapacity, maxKeyLength, loadFactor);
 		for (int i = 0; i < size; i++) {
 			StringBuilder keyBuilder = getKeyBuilder(keyDepth, maxKeyLength);
@@ -425,6 +459,8 @@ final class StateDeserializer {
 		int initialCapacity = readInt(buffer, "IdentityMap initial capacity");
 		float loadFactor = readFloat(buffer, "IdentityMap load factor");
 		int size = readNonNegativeInt(buffer, "IdentityMap size");
+		validateEntryCount(size, buffer, Integer.BYTES * 2, "IdentityMap");
+		validateMapConfiguration(initialCapacity, loadFactor, size, buffer, "IdentityMap");
 		IdentityMap<Object, Object> map = new IdentityMap<>(initialCapacity, loadFactor);
 		for (int i = 0; i < size; i++) {
 			Object key = readValue(registry, buffer, keyDepth);
@@ -439,6 +475,8 @@ final class StateDeserializer {
 		int initialCapacity = readInt(buffer, "IntMap initial capacity");
 		float loadFactor = readFloat(buffer, "IntMap load factor");
 		int size = readNonNegativeInt(buffer, "IntMap size");
+		validateEntryCount(size, buffer, Integer.BYTES * 2, "IntMap");
+		validateMapConfiguration(initialCapacity, loadFactor, size, buffer, "IntMap");
 		IntMap<Object> map = new IntMap<>(initialCapacity, loadFactor);
 		for (int i = 0; i < size; i++) {
 			int key = readInt(buffer, "IntMap key");
@@ -453,6 +491,8 @@ final class StateDeserializer {
 		int initialCapacity = readInt(buffer, "LinkedMap initial capacity");
 		float loadFactor = readFloat(buffer, "LinkedMap load factor");
 		int size = readNonNegativeInt(buffer, "LinkedMap size");
+		validateEntryCount(size, buffer, Integer.BYTES * 2, "LinkedMap");
+		validateMapConfiguration(initialCapacity, loadFactor, size, buffer, "LinkedMap");
 		LinkedMap<Object, Object> map = new LinkedMap<>(initialCapacity, loadFactor);
 		for (int i = 0; i < size; i++) {
 			Object key = readValue(registry, buffer, keyDepth);
@@ -467,6 +507,8 @@ final class StateDeserializer {
 		int initialCapacity = readInt(buffer, "LongMap initial capacity");
 		float loadFactor = readFloat(buffer, "LongMap load factor");
 		int size = readNonNegativeInt(buffer, "LongMap size");
+		validateEntryCount(size, buffer, Long.BYTES + Integer.BYTES, "LongMap");
+		validateMapConfiguration(initialCapacity, loadFactor, size, buffer, "LongMap");
 		LongMap<Object> map = new LongMap<>(initialCapacity, loadFactor);
 		for (int i = 0; i < size; i++) {
 			long key = readLong(buffer, "LongMap key");
@@ -481,6 +523,8 @@ final class StateDeserializer {
 		int initialCapacity = readInt(buffer, "Map initial capacity");
 		float loadFactor = readFloat(buffer, "Map load factor");
 		int size = readNonNegativeInt(buffer, "Map size");
+		validateEntryCount(size, buffer, Integer.BYTES * 2, "Map");
+		validateMapConfiguration(initialCapacity, loadFactor, size, buffer, "Map");
 		Map<Object, Object> map = new Map<>(initialCapacity, loadFactor);
 		for (int i = 0; i < size; i++) {
 			Object key = readValue(registry, buffer, keyDepth);
@@ -495,6 +539,8 @@ final class StateDeserializer {
 		int initialCapacity = readInt(buffer, "IdentitySet initial capacity");
 		float loadFactor = readFloat(buffer, "IdentitySet load factor");
 		int size = readNonNegativeInt(buffer, "IdentitySet size");
+		validateEntryCount(size, buffer, Integer.BYTES, "IdentitySet");
+		validateMapConfiguration(initialCapacity, loadFactor, size, buffer, "IdentitySet");
 		IdentitySet<Object> set = new IdentitySet<>(initialCapacity, loadFactor);
 		for (int i = 0; i < size; i++) {
 			if (!set.add(readValue(registry, buffer, keyDepth))) {
@@ -508,6 +554,8 @@ final class StateDeserializer {
 		int initialCapacity = readInt(buffer, "IntSet initial capacity");
 		float loadFactor = readFloat(buffer, "IntSet load factor");
 		int size = readNonNegativeInt(buffer, "IntSet size");
+		validateEntryCount(size, buffer, Integer.BYTES, "IntSet");
+		validateMapConfiguration(initialCapacity, loadFactor, size, buffer, "IntSet");
 		IntSet set = new IntSet(initialCapacity, loadFactor);
 		for (int i = 0; i < size; i++) {
 			int element = readInt(buffer, "IntSet element");
@@ -520,6 +568,8 @@ final class StateDeserializer {
 		int initialCapacity = readInt(buffer, "LinkedSet initial capacity");
 		float loadFactor = readFloat(buffer, "LinkedSet load factor");
 		int size = readNonNegativeInt(buffer, "LinkedSet size");
+		validateEntryCount(size, buffer, Integer.BYTES, "LinkedSet");
+		validateMapConfiguration(initialCapacity, loadFactor, size, buffer, "LinkedSet");
 		LinkedSet<Object> set = new LinkedSet<>(initialCapacity, loadFactor);
 		for (int i = 0; i < size; i++) {
 			if (!set.add(readValue(registry, buffer, keyDepth))) {
@@ -533,6 +583,8 @@ final class StateDeserializer {
 		int initialCapacity = readInt(buffer, "LongSet initial capacity");
 		float loadFactor = readFloat(buffer, "LongSet load factor");
 		int size = readNonNegativeInt(buffer, "LongSet size");
+		validateEntryCount(size, buffer, Long.BYTES, "LongSet");
+		validateMapConfiguration(initialCapacity, loadFactor, size, buffer, "LongSet");
 		LongSet set = new LongSet(initialCapacity, loadFactor);
 		for (int i = 0; i < size; i++) {
 			long element = readLong(buffer, "LongSet element");
@@ -545,6 +597,8 @@ final class StateDeserializer {
 		int initialCapacity = readInt(buffer, "Set initial capacity");
 		float loadFactor = readFloat(buffer, "Set load factor");
 		int size = readNonNegativeInt(buffer, "Set size");
+		validateEntryCount(size, buffer, Integer.BYTES, "Set");
+		validateMapConfiguration(initialCapacity, loadFactor, size, buffer, "Set");
 		Set<Object> set = new Set<>(initialCapacity, loadFactor);
 		for (int i = 0; i < size; i++) {
 			if (!set.add(readValue(registry, buffer, keyDepth))) {
@@ -552,6 +606,94 @@ final class StateDeserializer {
 			}
 		}
 		return set;
+	}
+
+	private static void validateEntryCount(int size, ByteBuffer buffer,
+			int minimumEntryLength, String description) {
+		if (size > buffer.remaining() / minimumEntryLength) {
+			throw new IllegalArgumentException("Invalid " + description + " size: " + size);
+		}
+	}
+
+	private static void validateCapacity(int capacity, int size, ByteBuffer buffer,
+			boolean allowZero, String description) {
+		if (capacity < (allowZero ? 0 : 1) || capacity > allocationLimit(size, buffer)) {
+			throw new IllegalArgumentException("Invalid " + description + ": " + capacity);
+		}
+	}
+
+	private static void validateListConfiguration(int initialCapacity, float growthFactor,
+			int size, ByteBuffer buffer, String description) {
+		validateCapacity(initialCapacity, size, buffer, false,
+				description + " initial capacity");
+		if (!Float.isFinite(growthFactor) || growthFactor <= 1f) {
+			throw new IllegalArgumentException("Invalid " + description
+					+ " growth factor: " + growthFactor);
+		}
+
+		long growthBase = Math.max(initialCapacity, Math.max(1L, size - 1L));
+		double projectedCapacity = growthBase * (double) growthFactor;
+		if (projectedCapacity > allocationLimit(size, buffer) * 2L) {
+			throw new IllegalArgumentException("Invalid " + description
+					+ " growth factor: " + growthFactor);
+		}
+	}
+
+	private static int validateMapConfiguration(int initialCapacity, float loadFactor,
+			int size, ByteBuffer buffer, String description) {
+		validateCapacity(initialCapacity, size, buffer, false,
+				description + " initial capacity");
+		if (!Float.isFinite(loadFactor) || loadFactor <= 0f) {
+			throw new IllegalArgumentException("Invalid " + description
+					+ " load factor: " + loadFactor);
+		}
+
+		long limit = allocationLimit(size, buffer);
+		int preloadCount = mapThreshold(initialCapacity, loadFactor);
+		if (preloadCount > limit) {
+			throw new IllegalArgumentException("Invalid " + description
+					+ " load factor: " + loadFactor);
+		}
+
+		long capacity = initialCapacity;
+		long threshold = preloadCount;
+		long count = 0;
+		while(count < size) {
+			if (count >= threshold) {
+				capacity *= 2L;
+				if (capacity > limit || capacity > Integer.MAX_VALUE) {
+					throw new IllegalArgumentException("Invalid " + description
+							+ " capacity for declared size: " + initialCapacity);
+				}
+				threshold = mapThreshold((int) capacity, loadFactor);
+			}
+			if (threshold > count) count = Math.min((long) size, threshold);
+			else count++;
+		}
+		return preloadCount;
+	}
+
+	private static void validateKeyStorage(int allocatedEntryCount, short maxKeyLength,
+			ByteBuffer buffer, String description) {
+		if (maxKeyLength < 0) {
+			throw new IllegalArgumentException("Invalid " + description
+					+ " maximum key length: " + maxKeyLength);
+		}
+		long storage = (long) allocatedEntryCount * maxKeyLength;
+		long limit = Math.max(MIN_KEY_STORAGE_LIMIT,
+				(long) buffer.remaining() * KEY_STORAGE_WIRE_AMPLIFICATION);
+		if (storage > limit) {
+			throw new IllegalArgumentException("Invalid " + description
+					+ " preallocated key storage: " + storage);
+		}
+	}
+
+	private static int mapThreshold(int capacity, float loadFactor) {
+		return Math.max(1, Math.round(capacity * loadFactor));
+	}
+
+	private static long allocationLimit(int size, ByteBuffer buffer) {
+		return Math.max(MIN_CONTAINER_ALLOCATION_LIMIT, (long) size + buffer.remaining());
 	}
 
 	private Object readCodecObject(StateRegistry registry, ByteBuffer buffer) {

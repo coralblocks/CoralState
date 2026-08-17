@@ -11,6 +11,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.coralblocks.coralds.list.ArrayList;
+import com.coralblocks.coralds.map.ByteBufferMap;
+import com.coralblocks.coralds.map.CharSequenceMap;
 import com.coralblocks.coralds.map.IntMap;
 import com.coralblocks.coralds.set.IntSet;
 import com.coralblocks.coralds.set.Set;
@@ -113,6 +115,104 @@ public class StateDeserializerTest {
 		assertEquals(reusableSource, restored);
 		assertEquals(2, personPool.getCount);
 		assertEquals(1, personPool.releaseCount);
+	}
+
+	@Test
+	public void rejectsWireSuppliedCapacitiesBeforeConstructingContainers() {
+		ArrayList<String> list = new ArrayList<>(1);
+		list.add("value");
+		State listSource = new State(registry);
+		listSource.put("list", list);
+		ByteBuffer listBuffer = serialize(listSource);
+		listBuffer.putInt(rootPayloadPosition(listBuffer), Integer.MAX_VALUE);
+		assertReadFails(new State(registry), listBuffer, "Invalid ArrayList initial capacity");
+
+		CharSequenceMap<String> strings = new CharSequenceMap<>(4, (short) 16, 0.8f);
+		strings.put("key", "value");
+		State stringMapSource = new State(registry);
+		stringMapSource.put("strings", strings);
+		ByteBuffer stringMapBuffer = serialize(stringMapSource);
+		stringMapBuffer.putInt(rootPayloadPosition(stringMapBuffer), 200_000);
+		assertReadFails(new State(registry), stringMapBuffer,
+				"Invalid CharSequenceMap initial capacity");
+
+		ByteBufferMap<String> bytes = new ByteBufferMap<>(4, (short) 16, 0.8f, true);
+		bytes.put(new byte[] { 1 }, "value");
+		State byteMapSource = new State(registry);
+		byteMapSource.put("bytes", bytes);
+		ByteBuffer byteMapBuffer = serialize(byteMapSource);
+		int byteMapPayload = rootPayloadPosition(byteMapBuffer);
+		byteMapBuffer.putInt(byteMapPayload, 100_000);
+		byteMapBuffer.putShort(byteMapPayload + Integer.BYTES, (short) 30_000);
+		assertReadFails(new State(registry), byteMapBuffer,
+				"Invalid ByteBufferMap initial capacity");
+	}
+
+	@Test
+	public void rejectsWireSuppliedKeyStorageAmplificationBeforeDirectAllocation() {
+		ByteBufferMap<String> bytes = new ByteBufferMap<>(1, (short) 8, 1f, true);
+		bytes.put(new byte[] { 1 }, "value");
+		State source = new State(registry);
+		source.put("bytes", bytes);
+		ByteBuffer buffer = serialize(source);
+		int payload = rootPayloadPosition(buffer);
+		buffer.putInt(payload, 256);
+		buffer.putShort(payload + Integer.BYTES, Short.MAX_VALUE);
+
+		assertReadFails(new State(registry), buffer,
+				"Invalid ByteBufferMap preallocated key storage");
+	}
+
+	@Test
+	public void rejectsExtremeGrowthAndLoadFactorsBeforeAllocation() {
+		ArrayList<String> list = new ArrayList<>(1, 2f);
+		list.add("one");
+		list.add("two");
+		State listSource = new State(registry);
+		listSource.put("list", list);
+		ByteBuffer listBuffer = serialize(listSource);
+		listBuffer.putFloat(rootPayloadPosition(listBuffer) + Integer.BYTES, Float.MAX_VALUE);
+		assertReadFails(new State(registry), listBuffer, "Invalid ArrayList growth factor");
+
+		IntMap<String> map = new IntMap<>(4, 0.8f);
+		map.put(1, "value");
+		State mapSource = new State(registry);
+		mapSource.put("map", map);
+		ByteBuffer mapBuffer = serialize(mapSource);
+		mapBuffer.putFloat(rootPayloadPosition(mapBuffer) + Integer.BYTES, Float.MAX_VALUE);
+		assertReadFails(new State(registry), mapBuffer, "Invalid IntMap load factor");
+	}
+
+	@Test
+	public void rejectsImpossibleEntryCountsBeforeUsingThemAsAllocationBounds() {
+		IntMap<String> map = new IntMap<>(4, 0.8f);
+		map.put(1, "value");
+		State source = new State(registry);
+		source.put("map", map);
+		ByteBuffer buffer = serialize(source);
+		buffer.putInt(rootPayloadPosition(buffer) + Integer.BYTES + Float.BYTES,
+				Integer.MAX_VALUE);
+
+		assertReadFails(new State(registry), buffer, "Invalid IntMap size");
+	}
+
+	@Test
+	public void acceptsDefaultPreallocationForEmptyContainers() {
+		State source = new State(registry);
+		source.put("list", new ArrayList<>());
+		source.put("strings", new CharSequenceMap<>());
+		source.put("bytes", new ByteBufferMap<>());
+		ByteBuffer buffer = serialize(source);
+		State restored = new State(registry);
+
+		assertEquals(buffer.limit(), restored.readFrom(buffer));
+		assertEquals(source, restored);
+		assertEquals(ArrayList.DEFAULT_INITIAL_CAPACITY,
+				((ArrayList<?>) restored.get("list")).getInitialCapacity());
+		assertEquals(CharSequenceMap.DEFAULT_INITIAL_CAPACITY,
+				((CharSequenceMap<?>) restored.get("strings")).getInitialCapacity());
+		assertEquals(ByteBufferMap.DEFAULT_INITIAL_CAPACITY,
+				((ByteBufferMap<?>) restored.get("bytes")).getInitialCapacity());
 	}
 
 	@Test
