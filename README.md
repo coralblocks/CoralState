@@ -157,14 +157,9 @@ The same State can be retained across reads:
 State reusable = new State(registry);
 reusable.readFrom(buffer);
 
-// Consume and, where applicable, release application/codec objects first.
 reusable.clear();
 reusable.readFrom(nextBuffer);
 ```
-
-`clear()` recycles CoralState's internal primitive, `CharSequence`, and `ByteBuffer` holders. It
-does not return successfully decoded application objects to registry pools; those objects are owned
-by the caller and must be released according to the application's pool policy.
 
 ## Schema Evolution
 
