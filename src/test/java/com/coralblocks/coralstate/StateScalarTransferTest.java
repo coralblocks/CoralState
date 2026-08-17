@@ -206,6 +206,36 @@ public class StateScalarTransferTest {
 	}
 
 	@Test
+	public void rejectsAReleasedCharSequenceReacquiredAsItsOwnCopyTarget() {
+		State state = new State(new StateRegistry());
+		state.put("source", new StringBuilder("hello"));
+		state.put("target", new StringBuilder("unchanged"));
+		CharSequence removed = state.removeCharSequence("source");
+
+		IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+				() -> state.put("target", removed));
+
+		assertTrue(error.getMessage().contains("released CharSequence holder"));
+		assertEquals("hello", removed.toString());
+		assertEquals("unchanged", state.getCharSequence("target").toString());
+		assertFalse(state.check("source"));
+		assertEquals(1, state.size());
+	}
+
+	@Test
+	public void copiesACharSequenceHolderThatIsStillOwnedByTheState() {
+		State state = new State(new StateRegistry());
+		state.put("source", new StringBuilder("hello"));
+		CharSequence borrowed = state.getCharSequence("source");
+
+		state.put("target", borrowed);
+
+		assertEquals("hello", state.getCharSequence("source").toString());
+		assertEquals("hello", state.getCharSequence("target").toString());
+		assertNotSame(state.getCharSequence("source"), state.getCharSequence("target"));
+	}
+
+	@Test
 	public void releasesAHolderWhenCopyingTheSourceFails() {
 		State state = new State(new StateRegistry());
 		state.put("seed", new StringBuilder("seed"));

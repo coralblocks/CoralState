@@ -176,6 +176,9 @@ final class TransferValuePools {
 		private final StringBuilder value = new StringBuilder(INITIAL_VALUE_CAPACITY);
 
 		private void set(CharSequence source) {
+			if (source == this) {
+				throw new IllegalArgumentException("Cannot store a released CharSequence holder");
+			}
 			value.setLength(0);
 			value.append(source);
 		}
