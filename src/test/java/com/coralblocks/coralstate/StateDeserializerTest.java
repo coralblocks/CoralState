@@ -1,6 +1,7 @@
 package com.coralblocks.coralstate;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -56,6 +57,62 @@ public class StateDeserializerTest {
 		assertEquals(source, restored);
 		assertEquals(7, personPool.getCount);
 		assertEquals(3, personPool.releaseCount);
+	}
+
+	@Test
+	public void rollsBackErrorsAndReusesTheState() {
+		State source = new State(registry);
+		source.put("a", new Person("Alice", 31));
+		source.put("b", new Person("Bob", 42));
+		ByteBuffer buffer = serialize(source);
+
+		TrackingPersonPool errorPool = new TrackingPersonPool();
+		ErrorOnSecondDecodePersonCodec errorCodec = new ErrorOnSecondDecodePersonCodec();
+		StateRegistry errorRegistry = new StateRegistry();
+		errorRegistry.register(errorCodec, errorPool);
+		State restored = new State(errorRegistry);
+		int startPosition = buffer.position();
+
+		AssertionError error = assertThrows(AssertionError.class, () -> restored.readFrom(buffer));
+		assertTrue(error.getMessage().contains("deliberate decode failure"));
+		assertTrue(restored.isEmpty());
+		assertEquals(startPosition, buffer.position());
+		assertEquals(2, errorPool.getCount);
+		assertEquals(2, errorPool.releaseCount);
+
+		errorCodec.failOnSecondDecode = false;
+		assertEquals(buffer.limit(), restored.readFrom(buffer));
+		assertEquals(source, restored);
+		assertEquals(4, errorPool.getCount);
+		assertEquals(2, errorPool.releaseCount);
+	}
+
+	@Test
+	public void rejectsExcessiveValueNestingAndReusesTheState() {
+		Object nested = "leaf";
+		for (int i = 0; i < StateDeserializer.MAX_VALUE_DEPTH; i++) {
+			ArrayList<Object> parent = new ArrayList<>(1);
+			parent.add(nested);
+			nested = parent;
+		}
+
+		State source = new State(registry);
+		source.put("a", new Person("Alice", 31));
+		source.put("b", nested);
+		ByteBuffer buffer = serialize(source);
+		State restored = new State(registry);
+
+		assertReadFails(restored, buffer, "Maximum State value nesting depth exceeded");
+		assertEquals(1, personPool.getCount);
+		assertEquals(1, personPool.releaseCount);
+
+		State reusableSource = new State(registry);
+		reusableSource.put("person", new Person("Bob", 42));
+		ByteBuffer reusableBuffer = serialize(reusableSource);
+		assertEquals(reusableBuffer.limit(), restored.readFrom(reusableBuffer));
+		assertEquals(reusableSource, restored);
+		assertEquals(2, personPool.getCount);
+		assertEquals(1, personPool.releaseCount);
 	}
 
 	@Test
@@ -197,6 +254,39 @@ public class StateDeserializerTest {
 		public void release(Person person) {
 			releaseCount++;
 			delegate.release(person);
+		}
+	}
+
+	private static final class ErrorOnSecondDecodePersonCodec
+			implements StateCodec<Person, PersonCodec.PersonProto> {
+
+		private final PersonCodec.PersonProto proto = new PersonCodec.PersonProto();
+		private boolean failOnSecondDecode = true;
+		private int decodeCount;
+
+		@Override
+		public Class<Person> javaType() {
+			return Person.class;
+		}
+
+		@Override
+		public PersonCodec.PersonProto getProto() {
+			return proto;
+		}
+
+		@Override
+		public void encode(Person person, PersonCodec.PersonProto personProto) {
+			personProto.name.set(person.getName());
+			personProto.age.set(person.getAge());
+		}
+
+		@Override
+		public void decode(PersonCodec.PersonProto personProto, Person person) {
+			if (failOnSecondDecode && ++decodeCount == 2) {
+				throw new AssertionError("deliberate decode failure");
+			}
+			person.setName(personProto.name.get());
+			person.setAge(personProto.age.get());
 		}
 	}
 }

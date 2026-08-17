@@ -40,6 +40,9 @@ final class StateDeserializer {
 	private static final int INITIAL_KEY_DEPTH = 4;
 	private static final int INITIAL_ROLLBACK_CAPACITY = 16;
 	private static final int INITIAL_STRING_CAPACITY = 256;
+	// A container level consumes several Java frames; keep hostile wire nesting well below the
+	// platform stack limit instead of relying on StackOverflowError recovery.
+	static final int MAX_VALUE_DEPTH = 128;
 
 	private final ArrayList<StringBuilder> keyBuilders = new ArrayList<>(INITIAL_KEY_DEPTH);
 	private final StringBuilder identifierBuilder = new StringBuilder(StateSerializer.MAX_WIRE_NAME_LENGTH);
@@ -84,11 +87,23 @@ final class StateDeserializer {
 			int bytesRead = buffer.position() - startPosition;
 			rollbackJournal.commit();
 			return bytesRead;
-		} catch (RuntimeException e) {
-			state.internalValues().clear();
-			rollbackJournal.rollback();
-			buffer.position(startPosition);
-			throw e;
+		} catch (Throwable failure) {
+			try {
+				state.internalValues().clear();
+			} catch (Throwable recoveryFailure) {
+				suppress(failure, recoveryFailure);
+			}
+			try {
+				rollbackJournal.rollback();
+			} catch (Throwable recoveryFailure) {
+				suppress(failure, recoveryFailure);
+			}
+			try {
+				buffer.position(startPosition);
+			} catch (Throwable recoveryFailure) {
+				suppress(failure, recoveryFailure);
+			}
+			throw failure;
 		} finally {
 			targetState = null;
 			clearBuilders();
@@ -97,6 +112,10 @@ final class StateDeserializer {
 	}
 
 	private Object readValue(StateRegistry registry, ByteBuffer buffer, int keyDepth) {
+		if (valueDepth >= MAX_VALUE_DEPTH) {
+			throw new IllegalArgumentException("Maximum State value nesting depth exceeded: "
+					+ MAX_VALUE_DEPTH);
+		}
 		valueDepth++;
 		try {
 			int nodeLength = readNonNegativeInt(buffer, "node length");
@@ -202,8 +221,8 @@ final class StateDeserializer {
 	}
 
 	private Object recordTransfer(Object value) {
-		rollbackJournal.record(targetState.transferValues().poolFor(value), value);
-		return value;
+		ObjectPool<?> pool = targetState.transferValues().poolFor(value);
+		return recordAcquired(pool, value);
 	}
 
 	private Object readBooleanValue(ByteBuffer buffer) {
@@ -247,8 +266,22 @@ final class StateDeserializer {
 	}
 
 	private Object recordPrimitive(Object value) {
-		rollbackJournal.record(targetState.primitiveValues().poolFor(value), value);
-		return value;
+		ObjectPool<?> pool = targetState.primitiveValues().poolFor(value);
+		return recordAcquired(pool, value);
+	}
+
+	private Object recordAcquired(ObjectPool<?> pool, Object value) {
+		try {
+			rollbackJournal.record(pool, value);
+			return value;
+		} catch (Throwable failure) {
+			try {
+				RollbackJournal.release(pool, value);
+			} catch (Throwable releaseFailure) {
+				suppress(failure, releaseFailure);
+			}
+			throw failure;
+		}
 	}
 
 	private ArrayLinkedList<Object> readArrayLinkedList(StateRegistry registry, ByteBuffer buffer, int keyDepth) {
@@ -548,9 +581,13 @@ final class StateDeserializer {
 			codec.decode(proto, object);
 			rollbackJournal.record(pool, object);
 			return object;
-		} catch (RuntimeException e) {
-			pool.release(object);
-			throw e;
+		} catch (Throwable failure) {
+			try {
+				pool.release(object);
+			} catch (Throwable releaseFailure) {
+				suppress(failure, releaseFailure);
+			}
+			throw failure;
 		}
 	}
 
@@ -580,15 +617,40 @@ final class StateDeserializer {
 		}
 
 		private void rollback() {
-			for (int i = objects.size() - 1; i >= 0; i--) {
-				release(pools.get(i), objects.get(i));
+			Throwable failure = null;
+			try {
+				for (int i = objects.size() - 1; i >= 0; i--) {
+					try {
+						release(pools.get(i), objects.get(i));
+					} catch (Throwable releaseFailure) {
+						if (failure == null) failure = releaseFailure;
+						else suppress(failure, releaseFailure);
+					}
+				}
+			} finally {
+				commit();
 			}
-			commit();
+			if (failure != null) rethrow(failure);
 		}
 
 		@SuppressWarnings({ "rawtypes", "unchecked" })
 		private static void release(ObjectPool pool, Object object) {
 			pool.release(object);
+		}
+
+		private static void rethrow(Throwable failure) {
+			if (failure instanceof RuntimeException runtimeException) throw runtimeException;
+			if (failure instanceof Error error) throw error;
+			throw new IllegalStateException("Unexpected checked exception while rolling back State", failure);
+		}
+	}
+
+	private static void suppress(Throwable failure, Throwable suppressed) {
+		if (failure == suppressed) return;
+		try {
+			failure.addSuppressed(suppressed);
+		} catch (Throwable ignored) {
+			// Preserve the primary failure even when suppression cannot allocate during recovery.
 		}
 	}
 
