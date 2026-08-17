@@ -253,8 +253,12 @@ final class TransferValuePools {
 		}
 
 		private void ensureCapacity(int requiredCapacity) {
-			if (requiredCapacity <= writable.capacity()) return;
-			writable = ByteBuffer.allocate(requiredCapacity);
+			int currentCapacity = writable.capacity();
+			if (requiredCapacity <= currentCapacity) return;
+			int newCapacity = currentCapacity <= Integer.MAX_VALUE / 2
+					? Math.max(requiredCapacity, currentCapacity * 2)
+					: requiredCapacity;
+			writable = ByteBuffer.allocate(newCapacity);
 			readOnly = writable.asReadOnlyBuffer();
 		}
 

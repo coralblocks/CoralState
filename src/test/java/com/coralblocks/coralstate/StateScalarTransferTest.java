@@ -125,6 +125,24 @@ public class StateScalarTransferTest {
 	}
 
 	@Test
+	public void growsPooledByteStorageGeometricallyAndRetainsItsHighWaterMark() {
+		State state = new State(new StateRegistry());
+
+		state.put("bytes", ByteBuffer.allocate(257));
+		assertEquals(512, state.getByteBuffer("bytes").capacity());
+		state.removeByteBuffer("bytes");
+
+		state.put("bytes", ByteBuffer.allocate(513));
+		assertEquals(1024, state.getByteBuffer("bytes").capacity());
+		state.removeByteBuffer("bytes");
+
+		state.put("bytes", ByteBuffer.allocate(10));
+		ByteBuffer retained = state.getByteBuffer("bytes");
+		assertEquals(1024, retained.capacity());
+		assertEquals(10, retained.remaining());
+	}
+
+	@Test
 	public void roundTripsCharSequenceAndByteBufferTransferValues() {
 		String everyJavaChar = everyJavaChar();
 		ByteBuffer directBytes = ByteBuffer.allocateDirect(6);
