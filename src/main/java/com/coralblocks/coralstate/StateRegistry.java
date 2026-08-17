@@ -63,8 +63,12 @@ public final class StateRegistry {
 		return byProtoType.get(protoKey(type, subtype, version));
 	}
 
+	/**
+	 * Returns the object pool registered for the given Java type, or {@code null} when the type is
+	 * not registered.
+	 */
 	@SuppressWarnings("unchecked")
-	<T> ObjectPool<T> findPoolByJavaType(Class<T> javaType) {
+	public <T> ObjectPool<T> getPool(Class<T> javaType) {
 		return (ObjectPool<T>) poolsByJavaType.get(javaType);
 	}
 

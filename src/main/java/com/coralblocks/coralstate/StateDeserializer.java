@@ -542,7 +542,7 @@ final class StateDeserializer {
 	private Object decode(StateCodec codec, StateRegistry registry, ByteBuffer buffer) {
 		Proto proto = codec.getProto();
 		proto.read(buffer);
-		ObjectPool pool = registry.findPoolByJavaType(codec.javaType());
+		ObjectPool pool = registry.getPool(codec.javaType());
 		Object object = pool.get();
 		try {
 			codec.decode(proto, object);
