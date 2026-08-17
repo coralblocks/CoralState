@@ -9,7 +9,8 @@ It uses [CoralDS](https://github.com/coralblocks/CoralDS) for fast garbage-free 
 - Fast binary serialization of the complete State to and from a `ByteBuffer` without creating any garbage.
 - Support for all Java primitives without boxing.
 - Support for `String` and top-level `CharSequence` and `ByteBuffer` values.
-- Support for all nested CoralDS lists, maps and sets.
+- Support for all CoralDS data structures (maps, lists and sets).
+- Support for recursively nested data structures, such as lists of maps and maps of lists.
 - Support for application objects through CoralProto codecs.
 - Validation of unsupported values before they are added or serialized.
 - Support for easy schema evolution through CoralProto.
