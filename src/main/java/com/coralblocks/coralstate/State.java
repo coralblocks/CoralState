@@ -29,10 +29,11 @@ public class State {
 	 * containers remain mutable, they are validated again when the State is serialized. A non-String
 	 * {@link CharSequence} or a {@link ByteBuffer} is copied into internal pooled storage and is only
 	 * supported as a top-level State value. Copying a ByteBuffer does not change its position and uses
-	 * only its remaining bytes.
+	 * only its remaining bytes. State keys are encoded as one byte per character and therefore only
+	 * support Latin-1 characters.
 	 */
 	public void put(CharSequence key, Object value) {
-		checkKey(key);
+		checkPutKey(key);
 		if (value == null) throw new IllegalArgumentException("State value cannot be null");
 		if (!(value instanceof String) && value instanceof CharSequence charSequence) {
 			putCharSequence(key, charSequence);
@@ -47,56 +48,56 @@ public class State {
 	}
 
 	public void put(CharSequence key, boolean value) {
-		checkKey(key);
+		checkPutKey(key);
 		Object previous = values.get(key);
 		primitiveValues.putBoolean(values, key, value);
 		transferValues.release(previous);
 	}
 
 	public void put(CharSequence key, byte value) {
-		checkKey(key);
+		checkPutKey(key);
 		Object previous = values.get(key);
 		primitiveValues.putByte(values, key, value);
 		transferValues.release(previous);
 	}
 
 	public void put(CharSequence key, char value) {
-		checkKey(key);
+		checkPutKey(key);
 		Object previous = values.get(key);
 		primitiveValues.putChar(values, key, value);
 		transferValues.release(previous);
 	}
 
 	public void put(CharSequence key, short value) {
-		checkKey(key);
+		checkPutKey(key);
 		Object previous = values.get(key);
 		primitiveValues.putShort(values, key, value);
 		transferValues.release(previous);
 	}
 
 	public void put(CharSequence key, int value) {
-		checkKey(key);
+		checkPutKey(key);
 		Object previous = values.get(key);
 		primitiveValues.putInt(values, key, value);
 		transferValues.release(previous);
 	}
 
 	public void put(CharSequence key, long value) {
-		checkKey(key);
+		checkPutKey(key);
 		Object previous = values.get(key);
 		primitiveValues.putLong(values, key, value);
 		transferValues.release(previous);
 	}
 
 	public void put(CharSequence key, float value) {
-		checkKey(key);
+		checkPutKey(key);
 		Object previous = values.get(key);
 		primitiveValues.putFloat(values, key, value);
 		transferValues.release(previous);
 	}
 
 	public void put(CharSequence key, double value) {
-		checkKey(key);
+		checkPutKey(key);
 		Object previous = values.get(key);
 		primitiveValues.putDouble(values, key, value);
 		transferValues.release(previous);
@@ -351,6 +352,11 @@ public class State {
 
 	private static void checkKey(CharSequence key) {
 		if (key == null) throw new IllegalArgumentException("State key cannot be null");
+	}
+
+	private static void checkPutKey(CharSequence key) {
+		checkKey(key);
+		StateSerializer.validateKeyForPut(key, "State key");
 	}
 
 	private void putCharSequence(CharSequence key, CharSequence value) {

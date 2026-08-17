@@ -103,7 +103,7 @@ final class StateSerializer {
 			Iterator<Object> iter = values.iterator();
 			while(iter.hasNext()) {
 				Object value = iter.next();
-				length = addLength(length, charsLength(values.getCurrIteratorKey()));
+				length = addLength(length, keyLength(values.getCurrIteratorKey(), "State key"));
 				length = addLength(length, getValueLength(value, state.getRegistry()));
 			}
 			return length;
@@ -128,7 +128,7 @@ final class StateSerializer {
 			Iterator<Object> iter = values.iterator();
 			while(iter.hasNext()) {
 				Object value = iter.next();
-				writeChars(values.getCurrIteratorKey(), buffer);
+				writeKey(values.getCurrIteratorKey(), "State key", buffer);
 				writeValue(value, state.getRegistry(), buffer);
 			}
 			return buffer.position() - startPosition;
@@ -233,6 +233,10 @@ final class StateSerializer {
 		Class<?> type = value.getClass();
 		if (type == String.class) return;
 		if (isPrimitiveContainer(type)) return;
+		if (type == CharSequenceMap.class) {
+			validateCharSequenceMap((CharSequenceMap<?>) value, registry);
+			return;
+		}
 		if (isObjectMap(type)) {
 			validateObjectMap(value, registry);
 			return;
@@ -243,6 +247,20 @@ final class StateSerializer {
 		}
 		if (registry.findByJavaType(type) == null) {
 			throw new IllegalArgumentException("Unsupported State value type: " + type.getName());
+		}
+	}
+
+	private void validateCharSequenceMap(CharSequenceMap<?> map, StateRegistry registry) {
+		enterContainerForValidation(map);
+		try {
+			Iterator<?> iter = map.iterator();
+			while(iter.hasNext()) {
+				Object value = iter.next();
+				validateKeyForPut(map.getCurrIteratorKey(), "CharSequenceMap key");
+				validateValue(value, registry);
+			}
+		} finally {
+			exitContainer(map);
 		}
 	}
 
@@ -284,7 +302,7 @@ final class StateSerializer {
 	private static boolean isObjectIterable(Class<?> type) {
 		return type == ArrayLinkedList.class || type == ArrayList.class || type == LinkedList.class
 				|| type == ByteBufferMap.class || type == ByteMap.class || type == CharMap.class
-				|| type == CharSequenceMap.class || type == IntMap.class || type == LongMap.class
+				|| type == IntMap.class || type == LongMap.class
 				|| type == IdentitySet.class || type == LinkedSet.class || type == Set.class;
 	}
 
@@ -639,7 +657,7 @@ final class StateSerializer {
 			Iterator<?> iter = map.iterator();
 			while(iter.hasNext()) {
 				Object value = iter.next();
-				writeChars(map.getCurrIteratorKey(), buffer);
+				writeKey(map.getCurrIteratorKey(), "CharSequenceMap key", buffer);
 				writeValue(value, registry, buffer);
 			}
 			finishNode(node, buffer);
@@ -654,7 +672,7 @@ final class StateSerializer {
 			Iterator<?> iter = map.iterator();
 			while(iter.hasNext()) {
 				Object value = iter.next();
-				length = addLength(length, charsLength(map.getCurrIteratorKey()));
+				length = addLength(length, keyLength(map.getCurrIteratorKey(), "CharSequenceMap key"));
 				length = addLength(length, getValueLength(value, registry));
 			}
 			return length;
@@ -952,6 +970,11 @@ final class StateSerializer {
 		writeRawChars(value, buffer);
 	}
 
+	private static void writeKey(CharSequence key, String description, ByteBuffer buffer) {
+		requireSerializableKey(key, description);
+		writeChars(key, buffer);
+	}
+
 	private static void writeRawChars(CharSequence value, ByteBuffer buffer) {
 		for (int i = 0; i < value.length(); i++) buffer.put((byte) value.charAt(i));
 	}
@@ -962,6 +985,29 @@ final class StateSerializer {
 
 	private static int charsLength(CharSequence value) {
 		return addLength(Integer.BYTES, value.length());
+	}
+
+	private static int keyLength(CharSequence key, String description) {
+		requireSerializableKey(key, description);
+		return charsLength(key);
+	}
+
+	static void validateKeyForPut(CharSequence key, String description) {
+		for (int i = 0; i < key.length(); i++) {
+			if (key.charAt(i) > 0xff) {
+				throw new IllegalArgumentException(description
+						+ " contains a character outside Latin-1 at index " + i);
+			}
+		}
+	}
+
+	private static void requireSerializableKey(CharSequence key, String description) {
+		for (int i = 0; i < key.length(); i++) {
+			if (key.charAt(i) > 0xff) {
+				throw new IllegalStateException(description
+						+ " contains a character outside Latin-1 at index " + i);
+			}
+		}
 	}
 
 	private static int multiplyLength(int count, int elementLength) {

@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -51,6 +52,23 @@ public class StateTest {
 	@Test(expected = IllegalArgumentException.class)
 	public void rejectsNullKeysWhenRemoving() {
 		new State(new StateRegistry()).remove(null);
+	}
+
+	@Test
+	public void rejectsStateKeysOutsideLatin1BeforeMutation() {
+		State state = new State(new StateRegistry());
+		ArrayList<Object> original = new ArrayList<>();
+		state.put("valid", original);
+
+		IllegalArgumentException objectError = assertThrows(IllegalArgumentException.class,
+				() -> state.put("日本", "value"));
+		IllegalArgumentException primitiveError = assertThrows(IllegalArgumentException.class,
+				() -> state.put("valid中", 42));
+
+		assertTrue(objectError.getMessage().contains("outside Latin-1"));
+		assertTrue(primitiveError.getMessage().contains("outside Latin-1"));
+		assertSame(original, state.get("valid"));
+		assertEquals(1, state.size());
 	}
 
 	@Test(expected = IllegalArgumentException.class)

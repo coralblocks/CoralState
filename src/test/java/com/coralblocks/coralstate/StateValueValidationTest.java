@@ -11,6 +11,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.coralblocks.coralds.list.ArrayList;
+import com.coralblocks.coralds.map.CharSequenceMap;
 import com.coralblocks.coralds.map.Map;
 import com.coralblocks.coralpool.ArrayObjectPool;
 import com.coralblocks.coralstate.example.Person;
@@ -70,6 +71,19 @@ public class StateValueValidationTest {
 	}
 
 	@Test
+	public void rejectsCharSequenceMapKeysOutsideLatin1() {
+		CharSequenceMap<String> strings = new CharSequenceMap<>();
+		strings.put("é中", "value");
+
+		IllegalArgumentException stringKeyError = assertThrows(IllegalArgumentException.class,
+				() -> state.put("strings", strings));
+
+		assertTrue(stringKeyError.getMessage().contains("CharSequenceMap key"));
+		assertTrue(stringKeyError.getMessage().contains("outside Latin-1"));
+		assertTrue(state.isEmpty());
+	}
+
+	@Test
 	public void rejectsCycles() {
 		ArrayList<Object> cyclic = new ArrayList<>();
 		cyclic.add(cyclic);
@@ -117,6 +131,27 @@ public class StateValueValidationTest {
 
 		assertTrue(lengthError.getMessage().contains(Animal.class.getName()));
 		assertTrue(writeError.getMessage().contains(Animal.class.getName()));
+	}
+
+	@Test
+	public void serializationRejectsAKeyMadeInvalidAfterPutAndRestoresTheBuffer() {
+		CharSequenceMap<String> strings = new CharSequenceMap<>();
+		strings.put("valid", "value");
+		state.put("strings", strings);
+		strings.put("中", "invalid");
+		ByteBuffer buffer = ByteBuffer.allocate(256);
+		buffer.position(7);
+
+		IllegalStateException lengthError = assertThrows(IllegalStateException.class,
+				state::getSerializedLength);
+		IllegalStateException writeError = assertThrows(IllegalStateException.class,
+				() -> state.writeTo(buffer));
+
+		assertTrue(lengthError.getMessage().contains("CharSequenceMap key"));
+		assertTrue(lengthError.getMessage().contains("outside Latin-1"));
+		assertTrue(writeError.getMessage().contains("CharSequenceMap key"));
+		assertTrue(writeError.getMessage().contains("outside Latin-1"));
+		assertEquals(7, buffer.position());
 	}
 
 	private static final class Animal {

@@ -103,7 +103,7 @@ public class CoralDSStateSerializationTest {
 
 		CharSequenceMap<Person> charSequenceMap = new CharSequenceMap<>(9, (short) 24, 0.6f);
 		charSequenceMap.put("first", person("CharSequenceMap one", 13));
-		charSequenceMap.put(new StringBuilder("second"), person("CharSequenceMap two", 14));
+		charSequenceMap.put(new StringBuilder("ação"), person("CharSequenceMap two", 14));
 		source.put("charSequenceMap", charSequenceMap);
 
 		IntMap<Person> intMap = new IntMap<>(10, 0.55f);
