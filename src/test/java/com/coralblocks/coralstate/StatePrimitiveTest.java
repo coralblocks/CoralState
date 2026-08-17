@@ -48,10 +48,14 @@ public class StatePrimitiveTest {
 
 		assertThrows(IllegalArgumentException.class, () -> state.get("number"));
 		assertThrows(IllegalArgumentException.class, () -> state.remove("number"));
-		assertThrows(IllegalArgumentException.class, () -> state.getInt("number"));
-		assertThrows(IllegalArgumentException.class, () -> state.removeInt("number"));
+		IllegalArgumentException getIntError = assertThrows(
+				IllegalArgumentException.class, () -> state.getInt("number"));
+		IllegalArgumentException removeIntError = assertThrows(
+				IllegalArgumentException.class, () -> state.removeInt("number"));
 		assertThrows(IllegalArgumentException.class, () -> state.getLong("missing"));
 		assertThrows(IllegalArgumentException.class, () -> state.removeLong("missing"));
+		assertEquals("State key does not contain an int value: number", getIntError.getMessage());
+		assertEquals("State key does not contain an int value: number", removeIntError.getMessage());
 		assertTrue(state.check("number"));
 		assertEquals(9_876_543_210L, state.getLong("number"));
 	}

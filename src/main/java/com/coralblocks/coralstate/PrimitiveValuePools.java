@@ -293,8 +293,8 @@ final class PrimitiveValuePools {
 			int expectedType) {
 		Object value = values.get(key);
 		if (typeOf(value) != expectedType) {
-			throw new IllegalArgumentException("State key does not contain a "
-					+ typeName(expectedType) + " value: " + key);
+			throw new IllegalArgumentException("State key does not contain "
+					+ typedValueName(expectedType) + ": " + key);
 		}
 		return (MutablePrimitive) value;
 	}
@@ -304,8 +304,8 @@ final class PrimitiveValuePools {
 		Object value = values.remove(key);
 		if (typeOf(value) != expectedType) {
 			if (value != null) values.put(key, value);
-			throw new IllegalArgumentException("State key does not contain a "
-					+ typeName(expectedType) + " value: " + key);
+			throw new IllegalArgumentException("State key does not contain "
+					+ typedValueName(expectedType) + ": " + key);
 		}
 		return (MutablePrimitive) value;
 	}
@@ -368,6 +368,10 @@ final class PrimitiveValuePools {
 			case DOUBLE: return "double";
 			default: return "non-primitive";
 		}
+	}
+
+	private static String typedValueName(int type) {
+		return (type == INT ? "an " : "a ") + typeName(type) + " value";
 	}
 
 	abstract static class MutablePrimitive {

@@ -980,12 +980,23 @@ final class StateSerializer {
 	}
 
 	private static void writeKey(CharSequence key, String description, ByteBuffer buffer) {
-		requireSerializableKey(key, description);
-		writeChars(key, buffer);
+		buffer.putInt(key.length());
+		writeRawChars(key, description, buffer);
 	}
 
 	private static void writeRawChars(CharSequence value, ByteBuffer buffer) {
 		for (int i = 0; i < value.length(); i++) buffer.put((byte) value.charAt(i));
+	}
+
+	private static void writeRawChars(CharSequence value, String description, ByteBuffer buffer) {
+		for (int i = 0; i < value.length(); i++) {
+			char character = value.charAt(i);
+			if (character > 0xff) {
+				throw new IllegalStateException(description
+						+ " contains a character outside Latin-1 at index " + i);
+			}
+			buffer.put((byte) character);
+		}
 	}
 
 	private static int maximumWireNameLength(String... wireNames) {
