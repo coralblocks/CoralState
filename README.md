@@ -1,5 +1,5 @@
 # CoralState
-CoralState is a lightweight, garbage-free and fast Java library for collecting objects and data structures into an in-memory state, serializing the complete state to a ByteBuffer, and restoring it later from disk, memory, or the network.
+CoralState is a lightweight, garbage-free and fast Java library for collecting objects and data structures into an in-memory state, serializing the complete state to a ByteBuffer, and restoring it later from disk, memory, or the network. It uses [CoralDS](https://github.com/coralblocks/CoralDS) for fast garbage-free data-structures, [CoralProto](https://github.com/coralblocks/CoralProto) for fast garbage-free serialization and [CoralPool](https://github.com/coralblocks/CoralPool) (internally) for fast garbage-free object pooling.
 
 ## Features
 
@@ -7,10 +7,10 @@ CoralState is a lightweight, garbage-free and fast Java library for collecting o
 - Fast binary serialization of the complete State to and from a `ByteBuffer` without creating any garbage.
 - Support for all Java primitives without boxing.
 - Support for `String` and top-level `CharSequence` and `ByteBuffer` values.
-- Support for all nested [CoralDS](https://github.com/coralblocks/CoralDS) lists, maps and sets.
-- Support for application objects through [CoralProto](https://github.com/coralblocks/CoralProto) codecs.
+- Support for all nested CoralDS lists, maps and sets.
+- Support for application objects through CoralProto codecs.
 - Validation of unsupported values before they are added or serialized.
-- Support for easy schema evolution through [CoralProto](https://github.com/coralblocks/CoralProto).
+- Support for easy schema evolution through CoralProto.
 - Designed for single-threaded applications. Non-thread-safe by design.
 
 ## Example
@@ -68,7 +68,7 @@ public final class Person {
 }
 ```
 
-Define its [CoralProto](https://github.com/coralblocks/CoralProto) codec:
+Define its CoralProto codec:
 
 ```java
 public final class PersonCodec implements StateCodec<Person, PersonCodec.PersonProto> {
@@ -117,7 +117,7 @@ StateRegistry registry = new StateRegistry();
 registry.register(new PersonCodec());
 ```
 
-Create a State containing one `Person` and a [CoralDS](https://github.com/coralblocks/CoralDS) list of three people:
+Create a State containing one `Person` and a CoralDS list of three people:
 
 ```java
 State original = new State(registry);
@@ -148,4 +148,4 @@ ArrayList<Person> restoredPeople = (ArrayList<Person>) restored.get("people");
 
 ## Schema Evolution
 
-CoralState support for schema evolution is naturally inherited from [CoralProto](https://github.com/coralblocks/CoralProto). For example, fields can be appended to `PersonProto` while preserving compatibility with older State data.
+CoralState support for schema evolution is naturally inherited from CoralProto. For example, fields can be appended to `PersonProto` while preserving compatibility with older State data.
