@@ -18,7 +18,7 @@ It uses [CoralDS](https://github.com/coralblocks/CoralDS) for fast garbage-free 
 
 ## Example
 
-Define the `Person` class. It must provide a public empty constructor so its object pool can create instances:
+Define a mutable object class, for example `Person`.
 
 ```java
 public final class Person {
