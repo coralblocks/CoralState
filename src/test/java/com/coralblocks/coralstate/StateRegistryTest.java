@@ -75,6 +75,7 @@ public class StateRegistryTest {
 		}
 	}
 
+	@SuppressWarnings("unused") // Field construction defines the type and subtype on AbstractProto.
 	private static final class PooledObjectProto extends AbstractProto {
 
 		private static final char TYPE = 'T';
