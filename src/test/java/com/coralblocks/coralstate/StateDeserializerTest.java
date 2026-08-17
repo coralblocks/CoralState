@@ -11,6 +11,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.coralblocks.coralds.list.ArrayList;
+import com.coralblocks.coralds.list.IntLinkedList;
 import com.coralblocks.coralds.map.ByteBufferMap;
 import com.coralblocks.coralds.map.CharSequenceMap;
 import com.coralblocks.coralds.map.IntMap;
@@ -230,6 +231,44 @@ public class StateDeserializerTest {
 				((CharSequenceMap<?>) restored.get("strings")).getInitialCapacity());
 		assertEquals(ByteBufferMap.DEFAULT_INITIAL_CAPACITY,
 				((ByteBufferMap<?>) restored.get("bytes")).getInitialCapacity());
+	}
+
+	@Test
+	public void sizesRestoredContainersForTheirDeclaredElementCounts() {
+		ArrayList<String> list = new ArrayList<>(1, 2f);
+		IntLinkedList linkedList = new IntLinkedList(1);
+		IntMap<String> map = new IntMap<>(1, 0.5f);
+		IntSet set = new IntSet(1, 0.5f);
+		CharSequenceMap<String> strings = new CharSequenceMap<>(1, (short) 8, 0.5f);
+		ByteBufferMap<String> bytes = new ByteBufferMap<>(1, (short) 8, 0.5f, false);
+		for (int i = 0; i < 6; i++) {
+			String value = "value-" + i;
+			list.add(value);
+			linkedList.add(i);
+			map.put(i, value);
+			set.add(i);
+			strings.put("key-" + i, value);
+			bytes.put(new byte[] { (byte) i }, value);
+		}
+		State source = new State(registry);
+		source.put("list", list);
+		source.put("linkedList", linkedList);
+		source.put("map", map);
+		source.put("set", set);
+		source.put("strings", strings);
+		source.put("bytes", bytes);
+
+		State restored = new State(registry);
+		ByteBuffer buffer = serialize(source);
+		assertEquals(buffer.limit(), restored.readFrom(buffer));
+		assertEquals(source, restored);
+		assertEquals(6, ((ArrayList<?>) restored.get("list")).getInitialCapacity());
+		assertEquals(6, ((IntLinkedList) restored.get("linkedList")).getInitialCapacity());
+		assertEquals(12, ((IntMap<?>) restored.get("map")).getInitialCapacity());
+		assertEquals(12, ((IntSet) restored.get("set")).getInitialCapacity());
+		assertEquals(12,
+				((CharSequenceMap<?>) restored.get("strings")).getInitialCapacity());
+		assertEquals(12, ((ByteBufferMap<?>) restored.get("bytes")).getInitialCapacity());
 	}
 
 	@Test
