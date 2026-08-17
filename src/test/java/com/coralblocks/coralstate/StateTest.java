@@ -135,10 +135,66 @@ public class StateTest {
 		assertEquals("second", restored.getCharSequence("text").toString());
 	}
 
+	@Test
+	public void performsOneMapLookupPerSuccessfulScalarOperation() {
+		State state = new State(new StateRegistry());
+		state.put("number", 1);
+		CountingCharSequence numberKey = new CountingCharSequence("number");
+
+		state.put(numberKey, 2);
+		assertEquals(numberKey.length() * 3, numberKey.charAtCalls);
+		numberKey.reset();
+		assertEquals(2, state.removeInt(numberKey));
+		assertEquals(numberKey.length() * 2, numberKey.charAtCalls);
+
+		state.put("text", new StringBuilder("value"));
+		CountingCharSequence textKey = new CountingCharSequence("text");
+		assertEquals("value", state.getCharSequence(textKey).toString());
+		assertEquals(textKey.length() * 2, textKey.charAtCalls);
+		textKey.reset();
+		assertEquals("value", state.removeCharSequence(textKey).toString());
+		assertEquals(textKey.length() * 2, textKey.charAtCalls);
+	}
+
 	private static ByteBuffer serialize(State state) {
 		ByteBuffer buffer = ByteBuffer.allocate(state.getSerializedLength());
 		state.writeTo(buffer);
 		buffer.flip();
 		return buffer;
+	}
+
+	private static final class CountingCharSequence implements CharSequence {
+
+		private final String value;
+		private int charAtCalls;
+
+		private CountingCharSequence(String value) {
+			this.value = value;
+		}
+
+		private void reset() {
+			charAtCalls = 0;
+		}
+
+		@Override
+		public int length() {
+			return value.length();
+		}
+
+		@Override
+		public char charAt(int index) {
+			charAtCalls++;
+			return value.charAt(index);
+		}
+
+		@Override
+		public CharSequence subSequence(int start, int end) {
+			return value.subSequence(start, end);
+		}
+
+		@Override
+		public String toString() {
+			return value;
+		}
 	}
 }

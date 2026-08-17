@@ -37,47 +37,48 @@ final class TransferValuePools {
 	private final ObjectPool<MutableBytes> byteBufferPool =
 			new ArrayObjectPool<>(INITIAL_POOL_CAPACITY, BYTE_BUFFER_BUILDER);
 
-	void putCharSequence(CharSequenceMap<Object> values, CharSequence key, CharSequence source) {
+	Object putCharSequence(CharSequenceMap<Object> values, CharSequence key, CharSequence source) {
 		MutableCharSequence mutable = charSequencePool.get();
 		try {
 			mutable.set(source);
-			values.put(key, mutable);
+			return values.put(key, mutable);
 		} catch (RuntimeException e) {
 			release(mutable);
 			throw e;
 		}
 	}
 
-	void putByteBuffer(CharSequenceMap<Object> values, CharSequence key, ByteBuffer source) {
+	Object putByteBuffer(CharSequenceMap<Object> values, CharSequence key, ByteBuffer source) {
 		MutableBytes mutable = byteBufferPool.get();
 		try {
 			mutable.set(source);
-			values.put(key, mutable);
+			return values.put(key, mutable);
 		} catch (RuntimeException e) {
 			release(mutable);
 			throw e;
 		}
 	}
 
-	CharSequence getCharSequence(CharSequenceMap<Object> values, CharSequence key) {
-		return (MutableCharSequence) require(values, key, CHAR_SEQUENCE);
+	CharSequence getCharSequence(Object value, CharSequence key) {
+		return (MutableCharSequence) require(value, key, CHAR_SEQUENCE);
 	}
 
 	ByteBuffer getByteBuffer(CharSequenceMap<Object> values, CharSequence key) {
 		return ((MutableBytes) require(values, key, BYTE_BUFFER)).readOnlyView();
 	}
 
-	CharSequence removeCharSequence(CharSequenceMap<Object> values, CharSequence key) {
-		MutableCharSequence mutable = (MutableCharSequence) require(values, key, CHAR_SEQUENCE);
-		values.remove(key);
+	CharSequence releaseRemovedCharSequence(CharSequenceMap<Object> values, CharSequence key,
+			Object value) {
+		MutableCharSequence mutable = (MutableCharSequence) requireRemoved(values, key, value,
+				CHAR_SEQUENCE);
 		release(mutable);
 		return mutable;
 	}
 
 	ByteBuffer removeByteBuffer(CharSequenceMap<Object> values, CharSequence key) {
-		MutableBytes mutable = (MutableBytes) require(values, key, BYTE_BUFFER);
+		Object value = values.remove(key);
+		MutableBytes mutable = (MutableBytes) requireRemoved(values, key, value, BYTE_BUFFER);
 		ByteBuffer readOnly = mutable.readOnlyView();
-		values.remove(key);
 		release(mutable);
 		return readOnly;
 	}
@@ -127,8 +128,21 @@ final class TransferValuePools {
 
 	private static MutableTransferValue require(CharSequenceMap<Object> values, CharSequence key,
 			int expectedType) {
-		Object value = values.get(key);
+		return require(values.get(key), key, expectedType);
+	}
+
+	private static MutableTransferValue require(Object value, CharSequence key, int expectedType) {
 		if (typeOf(value) != expectedType) {
+			throw new IllegalArgumentException("State key does not contain a "
+					+ typeName(expectedType) + " value: " + key);
+		}
+		return (MutableTransferValue) value;
+	}
+
+	private static MutableTransferValue requireRemoved(CharSequenceMap<Object> values,
+			CharSequence key, Object value, int expectedType) {
+		if (typeOf(value) != expectedType) {
+			if (value != null) values.put(key, value);
 			throw new IllegalArgumentException("State key does not contain a "
 					+ typeName(expectedType) + " value: " + key);
 		}

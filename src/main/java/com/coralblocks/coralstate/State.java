@@ -49,58 +49,42 @@ public class State {
 
 	public void put(CharSequence key, boolean value) {
 		checkPutKey(key);
-		Object previous = values.get(key);
-		primitiveValues.putBoolean(values, key, value);
-		transferValues.release(previous);
+		releaseInternal(primitiveValues.putBoolean(values, key, value));
 	}
 
 	public void put(CharSequence key, byte value) {
 		checkPutKey(key);
-		Object previous = values.get(key);
-		primitiveValues.putByte(values, key, value);
-		transferValues.release(previous);
+		releaseInternal(primitiveValues.putByte(values, key, value));
 	}
 
 	public void put(CharSequence key, char value) {
 		checkPutKey(key);
-		Object previous = values.get(key);
-		primitiveValues.putChar(values, key, value);
-		transferValues.release(previous);
+		releaseInternal(primitiveValues.putChar(values, key, value));
 	}
 
 	public void put(CharSequence key, short value) {
 		checkPutKey(key);
-		Object previous = values.get(key);
-		primitiveValues.putShort(values, key, value);
-		transferValues.release(previous);
+		releaseInternal(primitiveValues.putShort(values, key, value));
 	}
 
 	public void put(CharSequence key, int value) {
 		checkPutKey(key);
-		Object previous = values.get(key);
-		primitiveValues.putInt(values, key, value);
-		transferValues.release(previous);
+		releaseInternal(primitiveValues.putInt(values, key, value));
 	}
 
 	public void put(CharSequence key, long value) {
 		checkPutKey(key);
-		Object previous = values.get(key);
-		primitiveValues.putLong(values, key, value);
-		transferValues.release(previous);
+		releaseInternal(primitiveValues.putLong(values, key, value));
 	}
 
 	public void put(CharSequence key, float value) {
 		checkPutKey(key);
-		Object previous = values.get(key);
-		primitiveValues.putFloat(values, key, value);
-		transferValues.release(previous);
+		releaseInternal(primitiveValues.putFloat(values, key, value));
 	}
 
 	public void put(CharSequence key, double value) {
 		checkPutKey(key);
-		Object previous = values.get(key);
-		primitiveValues.putDouble(values, key, value);
-		transferValues.release(previous);
+		releaseInternal(primitiveValues.putDouble(values, key, value));
 	}
 	
 	public Object get(CharSequence key) {
@@ -163,7 +147,7 @@ public class State {
 		checkKey(key);
 		Object value = values.get(key);
 		if (value instanceof String string) return string;
-		return transferValues.getCharSequence(values, key);
+		return transferValues.getCharSequence(value, key);
 	}
 
 	/**
@@ -178,14 +162,16 @@ public class State {
 
 	public Object remove(CharSequence key) {
 		checkKey(key);
-		Object value = values.get(key);
+		Object value = values.remove(key);
 		if (PrimitiveValuePools.typeOf(value) != PrimitiveValuePools.NOT_PRIMITIVE) {
+			values.put(key, value);
 			throw new IllegalArgumentException("Primitive State values require a typed remover: " + key);
 		}
 		if (TransferValuePools.typeOf(value) != TransferValuePools.NOT_TRANSFER_VALUE) {
+			values.put(key, value);
 			throw new IllegalArgumentException("Scalar-transfer State values require a typed remover: " + key);
 		}
-		return values.remove(key);
+		return value;
 	}
 
 	public boolean removeBoolean(CharSequence key) {
@@ -234,12 +220,11 @@ public class State {
 	 */
 	public CharSequence removeCharSequence(CharSequence key) {
 		checkKey(key);
-		Object value = values.get(key);
+		Object value = values.remove(key);
 		if (value instanceof String string) {
-			values.remove(key);
 			return string;
 		}
-		return transferValues.removeCharSequence(values, key);
+		return transferValues.releaseRemovedCharSequence(values, key, value);
 	}
 
 	/**
@@ -375,15 +360,11 @@ public class State {
 	}
 
 	private void putCharSequence(CharSequence key, CharSequence value) {
-		Object previous = values.get(key);
-		transferValues.putCharSequence(values, key, value);
-		releaseInternal(previous);
+		releaseInternal(transferValues.putCharSequence(values, key, value));
 	}
 
 	private void putByteBuffer(CharSequence key, ByteBuffer value) {
-		Object previous = values.get(key);
-		transferValues.putByteBuffer(values, key, value);
-		releaseInternal(previous);
+		releaseInternal(transferValues.putByteBuffer(values, key, value));
 	}
 
 	private void releaseInternal(Object value) {

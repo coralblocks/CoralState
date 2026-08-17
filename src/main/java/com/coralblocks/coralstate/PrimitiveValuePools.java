@@ -84,36 +84,36 @@ final class PrimitiveValuePools {
 	private final ObjectPool<MutableFloat> floatPool = new ArrayObjectPool<>(INITIAL_POOL_CAPACITY, FLOAT_BUILDER);
 	private final ObjectPool<MutableDouble> doublePool = new ArrayObjectPool<>(INITIAL_POOL_CAPACITY, DOUBLE_BUILDER);
 
-	void putBoolean(CharSequenceMap<Object> values, CharSequence key, boolean value) {
-		put(values, key, acquireBoolean(value));
+	Object putBoolean(CharSequenceMap<Object> values, CharSequence key, boolean value) {
+		return put(values, key, acquireBoolean(value));
 	}
 
-	void putByte(CharSequenceMap<Object> values, CharSequence key, byte value) {
-		put(values, key, acquireByte(value));
+	Object putByte(CharSequenceMap<Object> values, CharSequence key, byte value) {
+		return put(values, key, acquireByte(value));
 	}
 
-	void putChar(CharSequenceMap<Object> values, CharSequence key, char value) {
-		put(values, key, acquireChar(value));
+	Object putChar(CharSequenceMap<Object> values, CharSequence key, char value) {
+		return put(values, key, acquireChar(value));
 	}
 
-	void putShort(CharSequenceMap<Object> values, CharSequence key, short value) {
-		put(values, key, acquireShort(value));
+	Object putShort(CharSequenceMap<Object> values, CharSequence key, short value) {
+		return put(values, key, acquireShort(value));
 	}
 
-	void putInt(CharSequenceMap<Object> values, CharSequence key, int value) {
-		put(values, key, acquireInt(value));
+	Object putInt(CharSequenceMap<Object> values, CharSequence key, int value) {
+		return put(values, key, acquireInt(value));
 	}
 
-	void putLong(CharSequenceMap<Object> values, CharSequence key, long value) {
-		put(values, key, acquireLong(value));
+	Object putLong(CharSequenceMap<Object> values, CharSequence key, long value) {
+		return put(values, key, acquireLong(value));
 	}
 
-	void putFloat(CharSequenceMap<Object> values, CharSequence key, float value) {
-		put(values, key, acquireFloat(value));
+	Object putFloat(CharSequenceMap<Object> values, CharSequence key, float value) {
+		return put(values, key, acquireFloat(value));
 	}
 
-	void putDouble(CharSequenceMap<Object> values, CharSequence key, double value) {
-		put(values, key, acquireDouble(value));
+	Object putDouble(CharSequenceMap<Object> values, CharSequence key, double value) {
+		return put(values, key, acquireDouble(value));
 	}
 
 	boolean getBoolean(CharSequenceMap<Object> values, CharSequence key) {
@@ -280,15 +280,13 @@ final class PrimitiveValuePools {
 		}
 	}
 
-	private void put(CharSequenceMap<Object> values, CharSequence key, MutablePrimitive mutable) {
-		Object previous;
+	private Object put(CharSequenceMap<Object> values, CharSequence key, MutablePrimitive mutable) {
 		try {
-			previous = values.put(key, mutable);
+			return values.put(key, mutable);
 		} catch (RuntimeException e) {
 			release(mutable);
 			throw e;
 		}
-		release(previous);
 	}
 
 	private static MutablePrimitive require(CharSequenceMap<Object> values, CharSequence key,
@@ -303,9 +301,13 @@ final class PrimitiveValuePools {
 
 	private static MutablePrimitive remove(CharSequenceMap<Object> values, CharSequence key,
 			int expectedType) {
-		MutablePrimitive mutable = require(values, key, expectedType);
-		values.remove(key);
-		return mutable;
+		Object value = values.remove(key);
+		if (typeOf(value) != expectedType) {
+			if (value != null) values.put(key, value);
+			throw new IllegalArgumentException("State key does not contain a "
+					+ typeName(expectedType) + " value: " + key);
+		}
+		return (MutablePrimitive) value;
 	}
 
 	static int typeOf(Object value) {
