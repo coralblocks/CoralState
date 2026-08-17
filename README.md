@@ -1,7 +1,7 @@
 # CoralState
 CoralState is a lightweight, garbage-free and fast Java library for collecting objects and data structures into an in-memory state, serializing the complete state to a ByteBuffer, and restoring it later from disk, memory, or the network.
 
-It uses [CoralDS](https://github.com/coralblocks/CoralDS) for fast garbage-free data-structures, [CoralProto](https://github.com/coralblocks/CoralProto) for fast garbage-free serialization and [CoralPool](https://github.com/coralblocks/CoralPool) (internally) for fast garbage-free object pooling.
+It uses [CoralDS](https://github.com/coralblocks/CoralDS) for fast garbage-free data-structures, [CoralProto](https://github.com/coralblocks/CoralProto) for fast garbage-free serialization and [CoralPool](https://github.com/coralblocks/CoralPool) for fast garbage-free object pooling.
 
 ## Features
 
