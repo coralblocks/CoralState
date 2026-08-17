@@ -265,6 +265,21 @@ public class State {
 	}
 
 	/**
+	 * Removes all entries and retains this State's allocated storage for reuse. CoralState-owned
+	 * primitive and scalar-transfer holders are returned to their local pools. Application objects,
+	 * including objects obtained from registered codec pools during a successful read, are only
+	 * removed from the State; ownership remains with the caller and they are not released to registry
+	 * pools. Any borrowed scalar-transfer value becomes invalid after this call.
+	 */
+	public void clear() {
+		Iterator<Object> iter = values.iterator();
+		while(iter.hasNext()) {
+			releaseInternal(iter.next());
+		}
+		values.clear();
+	}
+
+	/**
 	 * Returns the exact number of bytes required to serialize this State.
 	 *
 	 * @return the serialized length of this State

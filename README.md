@@ -13,6 +13,7 @@ It uses [CoralDS](https://github.com/coralblocks/CoralDS) for fast garbage-free 
 - Support for recursively nested data structures, such as lists of maps and maps of lists.
 - Support for application objects through CoralProto codecs.
 - Validation of unsupported values before they are added or serialized.
+- Reusable State instances.
 - Support for easy schema evolution through CoralProto.
 - Designed for single-threaded applications. Non-thread-safe by design.
 
@@ -149,6 +150,21 @@ Assert.assertEquals(original, restored);
 Person person = (Person) restored.get("person");
 ArrayList<Person> restoredPeople = (ArrayList<Person>) restored.get("people");
 ```
+
+The same State can be retained across reads:
+
+```java
+State reusable = new State(registry);
+reusable.readFrom(buffer);
+
+// Consume and, where applicable, release application/codec objects first.
+reusable.clear();
+reusable.readFrom(nextBuffer);
+```
+
+`clear()` recycles CoralState's internal primitive, `CharSequence`, and `ByteBuffer` holders. It
+does not return successfully decoded application objects to registry pools; those objects are owned
+by the caller and must be released according to the application's pool policy.
 
 ## Schema Evolution
 

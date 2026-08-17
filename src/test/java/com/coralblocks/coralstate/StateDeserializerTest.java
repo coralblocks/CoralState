@@ -62,6 +62,23 @@ public class StateDeserializerTest {
 	}
 
 	@Test
+	public void clearDoesNotReleaseSuccessfullyDecodedObjectsOwnedByTheCaller() {
+		State source = new State(registry);
+		source.put("person", new Person("Alice", 31));
+		State restored = new State(registry);
+		restored.readFrom(serialize(source));
+		Person decoded = (Person) restored.get("person");
+
+		restored.clear();
+
+		assertTrue(restored.isEmpty());
+		assertEquals(1, personPool.getCount);
+		assertEquals(0, personPool.releaseCount);
+		personPool.release(decoded);
+		assertEquals(1, personPool.releaseCount);
+	}
+
+	@Test
 	public void rollsBackErrorsAndReusesTheState() {
 		State source = new State(registry);
 		source.put("a", new Person("Alice", 31));
