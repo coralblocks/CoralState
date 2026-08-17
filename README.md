@@ -27,7 +27,8 @@ public final class Person {
     private final StringBuilder name = new StringBuilder(MAX_NAME);
     private int age;
 
-    public Person() { // must be defined so CoralState can create pooled instances
+    public Person() { 
+        // must be defined so CoralState can create pooled instances
     }
 
     public Person(CharSequence name, int age) {
