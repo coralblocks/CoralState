@@ -80,7 +80,21 @@ final class StateSerializer {
 	static final String LONG_SET_WIRE_NAME = "LongSet";
 	static final String SET_WIRE_NAME = "Set";
 
-	static final int MAX_WIRE_NAME_LENGTH = CHAR_SEQUENCE_MAP_WIRE_NAME.length();
+	static final int MAX_WIRE_NAME_LENGTH;
+
+	static {
+		MAX_WIRE_NAME_LENGTH = maximumWireNameLength(
+				CORAL_PROTO_WIRE_NAME, STRING_WIRE_NAME, CHAR_SEQUENCE_WIRE_NAME,
+				BYTE_BUFFER_WIRE_NAME, BOOLEAN_WIRE_NAME, BYTE_WIRE_NAME, CHAR_WIRE_NAME,
+				SHORT_WIRE_NAME, INT_WIRE_NAME, LONG_WIRE_NAME, FLOAT_WIRE_NAME,
+				DOUBLE_WIRE_NAME, ARRAY_LINKED_LIST_WIRE_NAME, ARRAY_LIST_WIRE_NAME,
+				INT_ARRAY_LIST_WIRE_NAME, INT_LINKED_LIST_WIRE_NAME, LINKED_LIST_WIRE_NAME,
+				LONG_ARRAY_LIST_WIRE_NAME, LONG_LINKED_LIST_WIRE_NAME, BYTE_BUFFER_MAP_WIRE_NAME,
+				BYTE_MAP_WIRE_NAME, CHAR_MAP_WIRE_NAME, CHAR_SEQUENCE_MAP_WIRE_NAME,
+				IDENTITY_MAP_WIRE_NAME, INT_MAP_WIRE_NAME, LINKED_MAP_WIRE_NAME,
+				LONG_MAP_WIRE_NAME, MAP_WIRE_NAME, IDENTITY_SET_WIRE_NAME, INT_SET_WIRE_NAME,
+				LINKED_SET_WIRE_NAME, LONG_SET_WIRE_NAME, SET_WIRE_NAME);
+	}
 
 	private final IdentitySet<Object> activeContainers = new IdentitySet<>();
 
@@ -892,14 +906,9 @@ final class StateSerializer {
 		return Integer.BYTES + Float.BYTES + Integer.BYTES;
 	}
 
-	private int writeObjectElements(Iterable<?> values, StateRegistry registry, ByteBuffer buffer) {
-		int count = 0;
+	private void writeObjectElements(Iterable<?> values, StateRegistry registry, ByteBuffer buffer) {
 		Iterator<?> iter = values.iterator();
-		while(iter.hasNext()) {
-			writeValue(iter.next(), registry, buffer);
-			count++;
-		}
-		return count;
+		while(iter.hasNext()) writeValue(iter.next(), registry, buffer);
 	}
 
 	private int getObjectIterableLength(Iterable<?> values, StateRegistry registry, int length) {
@@ -977,6 +986,12 @@ final class StateSerializer {
 
 	private static void writeRawChars(CharSequence value, ByteBuffer buffer) {
 		for (int i = 0; i < value.length(); i++) buffer.put((byte) value.charAt(i));
+	}
+
+	private static int maximumWireNameLength(String... wireNames) {
+		int maximum = 0;
+		for (String wireName : wireNames) maximum = Math.max(maximum, wireName.length());
+		return maximum;
 	}
 
 	private static int nodeBaseLength(CharSequence wireName) {

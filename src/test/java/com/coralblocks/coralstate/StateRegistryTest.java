@@ -3,6 +3,7 @@ package com.coralblocks.coralstate;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 
 import org.junit.Test;
 
@@ -40,6 +41,19 @@ public class StateRegistryTest {
 
 		assertSame(pool, registry.getPool(PooledObject.class));
 		assertEquals(2, PooledObject.instances);
+	}
+
+	@Test
+	public void rejectsDuplicateRegistrationBeforeConstructingAnotherDefaultPool() {
+		PooledObject.instances = 0;
+		StateRegistry registry = new StateRegistry();
+		registry.register(new PooledObjectCodec());
+
+		assertThrows(IllegalArgumentException.class,
+				() -> registry.register(new PooledObjectCodec()));
+
+		assertEquals(64, PooledObject.instances);
+		assertEquals(1, registry.size());
 	}
 
 	public static final class PooledObject {

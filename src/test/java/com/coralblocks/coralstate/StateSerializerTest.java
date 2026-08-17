@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
@@ -144,6 +145,18 @@ public class StateSerializerTest {
 		buffer.flip();
 		buffer.order(ByteOrder.BIG_ENDIAN);
 		assertHeader(buffer, 1);
+	}
+
+	@Test
+	public void maximumWireNameLengthCoversEveryDeclaredWireName() throws Exception {
+		int maximum = 0;
+		for (Field field : StateSerializer.class.getDeclaredFields()) {
+			if (field.getType() == String.class && field.getName().endsWith("_WIRE_NAME")) {
+				maximum = Math.max(maximum, ((String) field.get(null)).length());
+			}
+		}
+
+		assertEquals(maximum, StateSerializer.MAX_WIRE_NAME_LENGTH);
 	}
 
 	private static void assertHeader(ByteBuffer buffer, int expectedEntries) {

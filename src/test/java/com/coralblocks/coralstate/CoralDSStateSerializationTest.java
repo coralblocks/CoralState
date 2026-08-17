@@ -3,6 +3,8 @@ package com.coralblocks.coralstate;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -166,6 +168,8 @@ public class CoralDSStateSerializationTest {
 		identitySet.add(originalElement);
 
 		State source = new State(registry);
+		source.put("identityMapKeyAlias", originalKey);
+		source.put("identitySetElementAlias", originalElement);
 		source.put("identityMap", identityMap);
 		source.put("identitySet", identitySet);
 		State restored = roundTrip(source);
@@ -177,10 +181,15 @@ public class CoralDSStateSerializationTest {
 		assertEquals(18, restoredMap.getInitialCapacity());
 		assertEquals(0.55f, restoredMap.getLoadFactor(), 0f);
 		assertEquals(1, restoredMap.size());
+		assertFalse(restoredMap.containsKey(originalKey));
+		assertFalse(restoredMap.containsKey((Person) restored.get("identityMapKeyAlias")));
 		Iterator<Person> mapIterator = restoredMap.iterator();
 		assertTrue(mapIterator.hasNext());
-		assertEquals(originalValue, mapIterator.next());
-		assertEquals(originalKey, restoredMap.getCurrIteratorKey());
+		Person restoredMapValue = mapIterator.next();
+		Person restoredMapKey = restoredMap.getCurrIteratorKey();
+		assertEquals(originalValue, restoredMapValue);
+		assertEquals(originalKey, restoredMapKey);
+		assertSame(restoredMapValue, restoredMap.get(restoredMapKey));
 		assertFalse(mapIterator.hasNext());
 
 		@SuppressWarnings("unchecked")
@@ -188,10 +197,28 @@ public class CoralDSStateSerializationTest {
 		assertEquals(19, restoredSet.getInitialCapacity());
 		assertEquals(0.6f, restoredSet.getLoadFactor(), 0f);
 		assertEquals(1, restoredSet.size());
+		assertFalse(restoredSet.contains(originalElement));
+		assertFalse(restoredSet.contains((Person) restored.get("identitySetElementAlias")));
 		Iterator<Person> setIterator = restoredSet.iterator();
 		assertTrue(setIterator.hasNext());
-		assertEquals(originalElement, setIterator.next());
+		Person restoredElement = setIterator.next();
+		assertEquals(originalElement, restoredElement);
+		assertTrue(restoredSet.contains(restoredElement));
 		assertFalse(setIterator.hasNext());
+	}
+
+	@Test
+	public void reconstructsSharedContainersAsDistinctValues() {
+		ArrayList<Person> shared = new ArrayList<>();
+		shared.add(person("Shared", 34));
+		State source = new State(registry);
+		source.put("first", shared);
+		source.put("second", shared);
+
+		State restored = roundTrip(source);
+
+		assertEquals(restored.get("first"), restored.get("second"));
+		assertNotSame(restored.get("first"), restored.get("second"));
 	}
 
 	@Test

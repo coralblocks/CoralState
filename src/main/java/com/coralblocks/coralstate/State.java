@@ -30,7 +30,10 @@ public class State {
 	 * {@link CharSequence} or a {@link ByteBuffer} is copied into internal pooled storage and is only
 	 * supported as a top-level State value. Copying a ByteBuffer does not change its position and uses
 	 * only its remaining bytes. State keys are encoded as one byte per character and therefore only
-	 * support Latin-1 characters.
+	 * support Latin-1 characters. Containers are serialized as trees rather than reference graphs:
+	 * repeated references are encoded and reconstructed independently. Consequently, reconstructed
+	 * IdentityMap and IdentitySet entries only recognize the exact key and element instances held by
+	 * those reconstructed collections, not equivalent instances reconstructed elsewhere in the State.
 	 */
 	public void put(CharSequence key, Object value) {
 		checkPutKey(key);

@@ -19,20 +19,26 @@ public final class StateRegistry {
 	 * must provide a public empty constructor.
 	 */
 	public <T, P extends Proto> StateRegistry register(StateCodec<T, P> stateCodec) {
-		return register(stateCodec,
-				new ArrayObjectPool<T>(DEFAULT_POOL_SIZE, stateCodec.javaType()));
+		P proto = stateCodec.getProto();
+		Class<T> javaType = stateCodec.javaType();
+		int protoKey = protoKey(proto.getType(), proto.getSubtype(), proto.getVersion());
+		validateRegistration(javaType, proto, protoKey);
+		return register(stateCodec, new ArrayObjectPool<T>(DEFAULT_POOL_SIZE, javaType),
+				javaType, protoKey);
 	}
 
 	/**
 	 * Registers a codec using an application-provided object pool.
 	 */
 	public <T, P extends Proto> StateRegistry register(StateCodec<T, P> stateCodec, ObjectPool<T> pool) {
-		
-		Proto proto = stateCodec.getProto();
+		P proto = stateCodec.getProto();
 		Class<T> javaType = stateCodec.javaType();
-
 		int protoKey = protoKey(proto.getType(), proto.getSubtype(), proto.getVersion());
+		validateRegistration(javaType, proto, protoKey);
+		return register(stateCodec, pool, javaType, protoKey);
+	}
 
+	private void validateRegistration(Class<?> javaType, Proto proto, int protoKey) {
 		if (byJavaType.containsKey(javaType)) {
 			throw new IllegalArgumentException("A codec is already registered for " + javaType.getName());
 		}
@@ -42,7 +48,10 @@ public final class StateRegistry {
 			throw new IllegalArgumentException("A codec is already registered for "
 					+ describeProto(proto.getType(), proto.getSubtype(), proto.getVersion()));
 		}
+	}
 
+	private <T, P extends Proto> StateRegistry register(StateCodec<T, P> stateCodec,
+			ObjectPool<T> pool, Class<T> javaType, int protoKey) {
 		byJavaType.put(javaType, stateCodec);
 		byProtoType.put(protoKey, stateCodec);
 		poolsByJavaType.put(javaType, pool);
