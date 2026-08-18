@@ -126,6 +126,7 @@ Create a State containing one `Person` and a CoralDS list of three people:
 
 ```java
 State original = new State(registry);
+
 original.put("person", new Person("Alice", 31));
 
 ArrayList<Person> people = new ArrayList<>();
