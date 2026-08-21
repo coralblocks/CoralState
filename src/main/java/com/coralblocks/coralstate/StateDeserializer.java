@@ -44,6 +44,7 @@ final class StateDeserializer {
 	// request arbitrary eager allocation.
 	private static final int MIN_CONTAINER_ALLOCATION_LIMIT = 2 * Math.max(
 			ByteBufferMap.DEFAULT_INITIAL_CAPACITY, CharSequenceMap.DEFAULT_INITIAL_CAPACITY);
+	private static final float MAX_LIST_GROWTH_FACTOR = 1024f;
 	// Pooled key maps allocate maximum-key storage per preloaded or decoded entry.
 	private static final int KEY_STORAGE_WIRE_AMPLIFICATION = 8;
 	private static final long MIN_KEY_STORAGE_LIMIT = (long) MIN_CONTAINER_ALLOCATION_LIMIT
@@ -296,8 +297,8 @@ final class StateDeserializer {
 		int arraySize = readInt(buffer, "ArrayLinkedList array size");
 		int size = readNonNegativeInt(buffer, "ArrayLinkedList size");
 		validateEntryCount(size, buffer, Integer.BYTES, "ArrayLinkedList");
-		validateCapacity(arraySize, size, buffer, true, "ArrayLinkedList array size");
-		ArrayLinkedList<Object> list = new ArrayLinkedList<>(arraySize);
+		int restoredArraySize = clampArraySizeHint(arraySize, size, buffer);
+		ArrayLinkedList<Object> list = new ArrayLinkedList<>(restoredArraySize);
 		for (int i = 0; i < size; i++) list.addLast(readValue(registry, buffer, keyDepth));
 		return list;
 	}
@@ -330,8 +331,9 @@ final class StateDeserializer {
 		int initialCapacity = readInt(buffer, "IntLinkedList initial capacity");
 		int size = readNonNegativeInt(buffer, "IntLinkedList size");
 		validateEntryCount(size, buffer, Integer.BYTES, "IntLinkedList");
-		validateCapacity(initialCapacity, size, buffer, true, "IntLinkedList initial capacity");
-		IntLinkedList list = new IntLinkedList(Math.max(initialCapacity, size));
+		int restoredCapacity = clampCapacityHint(
+				initialCapacity, size, buffer, "IntLinkedList initial capacity");
+		IntLinkedList list = new IntLinkedList(restoredCapacity);
 		for (int i = 0; i < size; i++) list.add(readInt(buffer, "IntLinkedList element"));
 		return list;
 	}
@@ -340,8 +342,9 @@ final class StateDeserializer {
 		int initialCapacity = readInt(buffer, "LinkedList initial capacity");
 		int size = readNonNegativeInt(buffer, "LinkedList size");
 		validateEntryCount(size, buffer, Integer.BYTES, "LinkedList");
-		validateCapacity(initialCapacity, size, buffer, true, "LinkedList initial capacity");
-		LinkedList<Object> list = new LinkedList<>(Math.max(initialCapacity, size));
+		int restoredCapacity = clampCapacityHint(
+				initialCapacity, size, buffer, "LinkedList initial capacity");
+		LinkedList<Object> list = new LinkedList<>(restoredCapacity);
 		for (int i = 0; i < size; i++) list.add(readValue(registry, buffer, keyDepth));
 		return list;
 	}
@@ -362,8 +365,9 @@ final class StateDeserializer {
 		int initialCapacity = readInt(buffer, "LongLinkedList initial capacity");
 		int size = readNonNegativeInt(buffer, "LongLinkedList size");
 		validateEntryCount(size, buffer, Long.BYTES, "LongLinkedList");
-		validateCapacity(initialCapacity, size, buffer, true, "LongLinkedList initial capacity");
-		LongLinkedList list = new LongLinkedList(Math.max(initialCapacity, size));
+		int restoredCapacity = clampCapacityHint(
+				initialCapacity, size, buffer, "LongLinkedList initial capacity");
+		LongLinkedList list = new LongLinkedList(restoredCapacity);
 		for (int i = 0; i < size; i++) list.add(readLong(buffer, "LongLinkedList element"));
 		return list;
 	}
@@ -375,10 +379,8 @@ final class StateDeserializer {
 		boolean direct = readBoolean(buffer, "ByteBufferMap direct-buffer flag");
 		int size = readNonNegativeInt(buffer, "ByteBufferMap size");
 		validateEntryCount(size, buffer, Integer.BYTES * 2, "ByteBufferMap");
-		int restoredCapacity = validateMapConfiguration(
-				initialCapacity, loadFactor, size, buffer, "ByteBufferMap");
-		validateKeyStorage(mapThreshold(restoredCapacity, loadFactor),
-				maxKeyLength, buffer, "ByteBufferMap");
+		int restoredCapacity = validateKeyMapConfiguration(
+				initialCapacity, maxKeyLength, loadFactor, size, buffer, "ByteBufferMap");
 		ByteBufferMap<Object> map = new ByteBufferMap<>(
 				restoredCapacity, maxKeyLength, loadFactor, direct);
 		for (int i = 0; i < size; i++) {
@@ -445,10 +447,8 @@ final class StateDeserializer {
 		float loadFactor = readFloat(buffer, "CharSequenceMap load factor");
 		int size = readNonNegativeInt(buffer, "CharSequenceMap size");
 		validateEntryCount(size, buffer, Integer.BYTES * 2, "CharSequenceMap");
-		int restoredCapacity = validateMapConfiguration(
-				initialCapacity, loadFactor, size, buffer, "CharSequenceMap");
-		validateKeyStorage(mapThreshold(restoredCapacity, loadFactor),
-				maxKeyLength, buffer, "CharSequenceMap");
+		int restoredCapacity = validateKeyMapConfiguration(
+				initialCapacity, maxKeyLength, loadFactor, size, buffer, "CharSequenceMap");
 		CharSequenceMap<Object> map = new CharSequenceMap<>(
 				restoredCapacity, maxKeyLength, loadFactor);
 		for (int i = 0; i < size; i++) {
@@ -632,83 +632,133 @@ final class StateDeserializer {
 		}
 	}
 
-	private static void validateCapacity(int capacity, int size, ByteBuffer buffer,
-			boolean allowZero, String description) {
-		if (capacity < (allowZero ? 0 : 1) || capacity > allocationLimit(size, buffer)) {
-			throw new IllegalArgumentException("Invalid " + description + ": " + capacity);
+	private static int clampArraySizeHint(int arraySize, int size, ByteBuffer buffer) {
+		if (arraySize < 0) {
+			throw new IllegalArgumentException("Invalid ArrayLinkedList array size: " + arraySize);
 		}
+		return arraySize <= allocationLimit(size, buffer) ? arraySize : Math.min(arraySize, size);
+	}
+
+	private static int clampCapacityHint(int initialCapacity, int size, ByteBuffer buffer,
+			String description) {
+		if (initialCapacity < 0) {
+			throw new IllegalArgumentException("Invalid " + description + ": " + initialCapacity);
+		}
+		int restoredCapacity = Math.max(initialCapacity, size);
+		return restoredCapacity <= allocationLimit(size, buffer)
+				? restoredCapacity : size;
 	}
 
 	private static int validateListConfiguration(int initialCapacity, float growthFactor,
 			int size, ByteBuffer buffer, String description) {
-		validateCapacity(initialCapacity, size, buffer, false,
-				description + " initial capacity");
-		if (!Float.isFinite(growthFactor) || growthFactor <= 1f) {
+		if (initialCapacity <= 0) {
+			throw new IllegalArgumentException("Invalid " + description
+					+ " initial capacity: " + initialCapacity);
+		}
+		if (!Float.isFinite(growthFactor) || growthFactor <= 1f
+				|| growthFactor > MAX_LIST_GROWTH_FACTOR) {
 			throw new IllegalArgumentException("Invalid " + description
 					+ " growth factor: " + growthFactor);
 		}
 
-		int restoredCapacity = Math.max(initialCapacity, size);
-		long growthBase = Math.max(1L, restoredCapacity);
-		double projectedCapacity = growthBase * (double) growthFactor;
-		if (projectedCapacity > allocationLimit(size, buffer) * 2L) {
+		int minimumCapacity = Math.max(1, size);
+		int restoredCapacity = Math.max(initialCapacity, minimumCapacity);
+		if (restoredCapacity > allocationLimit(size, buffer)) restoredCapacity = minimumCapacity;
+		if (Math.round(restoredCapacity * growthFactor) == Integer.MAX_VALUE) {
 			throw new IllegalArgumentException("Invalid " + description
-					+ " growth factor: " + growthFactor);
+					+ " growth factor for restored capacity: " + growthFactor);
 		}
 		return restoredCapacity;
 	}
 
 	private static int validateMapConfiguration(int initialCapacity, float loadFactor,
 			int size, ByteBuffer buffer, String description) {
-		validateCapacity(initialCapacity, size, buffer, false,
-				description + " initial capacity");
+		if (initialCapacity <= 0) {
+			throw new IllegalArgumentException("Invalid " + description
+					+ " initial capacity: " + initialCapacity);
+		}
 		if (!Float.isFinite(loadFactor) || loadFactor <= 0f) {
 			throw new IllegalArgumentException("Invalid " + description
 					+ " load factor: " + loadFactor);
 		}
 
 		long limit = allocationLimit(size, buffer);
+		int minimumCapacity = minimumMapCapacity(
+				loadFactor, size, limit, initialCapacity, description);
+		int restoredCapacity = Math.max(initialCapacity, minimumCapacity);
+		return restoredCapacity <= limit && mapThreshold(restoredCapacity, loadFactor) <= limit
+				? restoredCapacity : minimumCapacity;
+	}
+
+	private static int minimumMapCapacity(float loadFactor, int size, long limit,
+			int recordedCapacity, String description) {
 		double requiredCapacity = Math.ceil(size / (double) loadFactor);
 		if (!Double.isFinite(requiredCapacity)
 				|| requiredCapacity > limit || requiredCapacity > Integer.MAX_VALUE) {
 			throw new IllegalArgumentException("Invalid " + description
-					+ " capacity for declared size: " + initialCapacity);
+					+ " capacity for declared size: " + recordedCapacity);
 		}
 
-		int restoredCapacity = (int) Math.max(initialCapacity, (long) requiredCapacity);
-		int threshold = mapThreshold(restoredCapacity, loadFactor);
+		int minimumCapacity = (int) Math.max(1L, (long) requiredCapacity);
+		int threshold = mapThreshold(minimumCapacity, loadFactor);
 		if (threshold < size) {
-			if (restoredCapacity == Integer.MAX_VALUE || restoredCapacity + 1L > limit) {
+			if (minimumCapacity == Integer.MAX_VALUE || minimumCapacity + 1L > limit) {
 				throw new IllegalArgumentException("Invalid " + description
-						+ " capacity for declared size: " + initialCapacity);
+						+ " capacity for declared size: " + recordedCapacity);
 			}
-			restoredCapacity++;
-			threshold = mapThreshold(restoredCapacity, loadFactor);
+			minimumCapacity++;
+			threshold = mapThreshold(minimumCapacity, loadFactor);
 			if (threshold < size) {
 				throw new IllegalArgumentException("Invalid " + description
-						+ " capacity for declared size: " + initialCapacity);
+						+ " capacity for declared size: " + recordedCapacity);
 			}
 		}
 		if (threshold > limit) {
 			throw new IllegalArgumentException("Invalid " + description
 					+ " load factor: " + loadFactor);
 		}
-		return restoredCapacity;
+		return minimumCapacity;
 	}
 
-	private static void validateKeyStorage(int allocatedEntryCount, short maxKeyLength,
-			ByteBuffer buffer, String description) {
+	private static int validateKeyMapConfiguration(int initialCapacity, short maxKeyLength,
+			float loadFactor, int size, ByteBuffer buffer, String description) {
 		if (maxKeyLength < 0) {
 			throw new IllegalArgumentException("Invalid " + description
 					+ " maximum key length: " + maxKeyLength);
 		}
+		int restoredCapacity = validateMapConfiguration(
+				initialCapacity, loadFactor, size, buffer, description);
+
+		// Key-map constructors eagerly allocate maximum-key storage for every threshold entry.
+		// Preserve the wire capacity only when it is safe; otherwise use the smallest capacity
+		// that can read all declared entries without growing during the fill.
+		int threshold = mapThreshold(restoredCapacity, loadFactor);
+		if (keyStorageFits(threshold, maxKeyLength, buffer)) return restoredCapacity;
+
+		int minimumCapacity = minimumMapCapacity(loadFactor, size,
+				allocationLimit(size, buffer), initialCapacity, description);
+		validateKeyStorage(mapThreshold(minimumCapacity, loadFactor),
+				maxKeyLength, buffer, description);
+		return minimumCapacity;
+	}
+
+	private static void validateKeyStorage(int allocatedEntryCount, short maxKeyLength,
+			ByteBuffer buffer, String description) {
 		long storage = (long) allocatedEntryCount * maxKeyLength;
-		long limit = Math.max(MIN_KEY_STORAGE_LIMIT,
-				(long) buffer.remaining() * KEY_STORAGE_WIRE_AMPLIFICATION);
-		if (storage > limit) {
+		if (storage > keyStorageLimit(buffer)) {
 			throw new IllegalArgumentException("Invalid " + description
 					+ " preallocated key storage: " + storage);
 		}
+	}
+
+	private static boolean keyStorageFits(int allocatedEntryCount, short maxKeyLength,
+			ByteBuffer buffer) {
+		return (long) allocatedEntryCount * maxKeyLength <= keyStorageLimit(buffer);
+	}
+
+	private static long keyStorageLimit(ByteBuffer buffer) {
+		return Math.max(MIN_KEY_STORAGE_LIMIT,
+				(long) buffer.remaining() * KEY_STORAGE_WIRE_AMPLIFICATION);
 	}
 
 	private static int mapThreshold(int capacity, float loadFactor) {
